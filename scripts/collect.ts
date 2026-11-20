@@ -5,9 +5,10 @@
  * DEVIN_API_KEY / DEVIN_ORG_ID はプロセスの環境変数からのみ読む（.env ファイルは読まない）。
  * 未設定ならダミーデータを保存する。
  */
+import type Database from "better-sqlite3";
 import { buildCurrentActivity } from "../lib/activity";
 import { DB_PATH, openDb } from "../lib/db";
-import { fetchSessions, readCredentials, sessionUrl } from "../lib/devin-api";
+import { fetchSession, fetchSessions, readCredentials, sessionUrl, type DevinCredentials } from "../lib/devin-api";
 import { needsAttention } from "../lib/devin-status";
 import { dummySessions, type DummyItem } from "../lib/dummy-data";
 import type { DevinSessionItem } from "../lib/types";
@@ -20,6 +21,7 @@ async function collectOnce(): Promise<void> {
     : dummySessions();
 
   const db = openDb()!;
+  if (cred) items.push(...(await refreshDropped(db, cred, items)));
   const now = Math.floor(Date.now() / 1000);
   const upsert = db.prepare(`
     INSERT INTO sessions (session_id, title, status, status_detail, acus_consumed, pr_urls, pr_states, url,
@@ -63,6 +65,29 @@ async function collectOnce(): Promise<void> {
 
   const label = mode === "dummy" ? "ダミーモード（DEVIN_API_KEY / DEVIN_ORG_ID 未設定）" : "Devin API";
   console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存 → ${DB_PATH}`);
+}
+
+/** 最新50件から外れた「進行中・要確認」のセッションを個別取得し、古い状態のまま残らないようにする */
+async function refreshDropped(
+  db: Database.Database,
+  cred: DevinCredentials,
+  fetched: DevinSessionItem[],
+): Promise<DevinSessionItem[]> {
+  const seen = new Set(fetched.map((it) => it.session_id));
+  const stale = (
+    db
+      .prepare(
+        "SELECT session_id FROM sessions WHERE source = 'devin' AND (needs_attention = 1 OR status IN ('new', 'claimed', 'running', 'resuming'))",
+      )
+      .all() as { session_id: string }[]
+  ).filter((r) => !seen.has(r.session_id));
+  const out: DevinSessionItem[] = [];
+  for (const { session_id } of stale) {
+    const it = await fetchSession(cred, session_id);
+    if (it) out.push(it);
+    else db.prepare("DELETE FROM sessions WHERE session_id = ?").run(session_id);
+  }
+  return out;
 }
 
 async function main(): Promise<void> {
