@@ -1,0 +1,35 @@
+:root {
+  --paper: #ffffff;
+  --field: #f6f6f5;
+  --rule: #e3e3e1;
+  --rule-soft: #eeeeec;
+  --ink: #1a1a1a;
+  --ink-2: #555553;
+  --ink-3: #8e8e8b;
+  --track: #e8e8e6;
+  --fill: #3a3a38;
+  --primary: #1e4f86;
+  --primary-hover: #173f6c;
+  --primary-tint: #eef3f9;
+  --tabbar-h: 64px;
+  --mantine-color-body: var(--paper);
+  --mantine-color-text: var(--ink);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: "Noto Sans JP", system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--paper);
+  font-feature-settings: "palt" 1;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
