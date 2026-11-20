@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1",
     "lint": "tsc --noEmit",
-    "collect": "tsx scripts/collect.ts"
+    "collect": "tsx scripts/collect.ts",
+    "migrate:turso": "tsx scripts/migrate-to-turso.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.2.6",
+    "@libsql/client": "^0.17.4",
     "@mantine/core": "^8.3.18",
     "@mantine/hooks": "^8.3.18",
     "better-sqlite3": "^12.10.1",

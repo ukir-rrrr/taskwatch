@@ -4,8 +4,8 @@ import { loadSnapshot } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function SessionsPage() {
-  const snapshot = loadSnapshot();
+export default async function SessionsPage() {
+  const snapshot = await loadSnapshot();
   const now = Math.floor(Date.now() / 1000);
   return (
     <AppFrame active="sessions" snapshot={snapshot}>

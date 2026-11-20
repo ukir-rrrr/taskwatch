@@ -2,7 +2,7 @@
 
 Devin のセッションを一覧で監視する個人用 Web アプリです。画面仕様は `design/` のモック（`taskwatch-v2.html` = スマホ版、`taskwatch-v2-pc.html` = PC版）を参照してください。
 
-- 収集ワーカー（`npm run collect`）が Devin API v3 からセッション一覧を取得し、SQLite（`data/taskwatch.db`）に保存します
+- 収集ワーカー（`npm run collect`）が Devin API v3 からセッション一覧を取得し、SQLite（既定はローカルの `data/taskwatch.db`、[Turso モード](#turso-モードvercel-へのデプロイ)ではホスト型 SQLite）に保存します
 - 画面（Next.js）は SQLite だけを読みます。表示のたびに Devin API を叩くことはありません（30秒ごとに SQLite を読み直します）
 - レポート画面（GitHub PR レポート）と Claude Code 連携は次の段階で対応予定です
 
@@ -50,15 +50,90 @@ npm run dev
 - 画面は認証なしの個人用なので、`npm run dev` / `npm start` は `127.0.0.1` だけで待ち受けます。他の端末から見る場合は SSH ポート転送などを使ってください
 - DB の場所を変える場合は、`TASKWATCH_DB_PATH` を収集ワーカーと画面の両方のプロセスに環境変数で渡してください
 
+## Turso モード（Vercel へのデプロイ）
+
+画面を Vercel に置く場合は、DB をホスト型 SQLite の [Turso](https://turso.tech/)（libSQL）にします。収集ワーカーはこれまで通り手元の VM で動かし、同じ Turso の DB に書き込みます。
+
+| 環境変数 | 内容 |
+| --- | --- |
+| `TURSO_DATABASE_URL` | Turso の DB URL（例: `libsql://taskwatch-<組織名>.turso.io`） |
+| `TURSO_AUTH_TOKEN` | Turso の認証トークン |
+
+- **両方**がプロセスの環境変数に設定されているときだけ Turso に接続します。片方だけ・未設定ならローカルの SQLite（`data/taskwatch.db` / `TASKWATCH_DB_PATH`）を使います（片方だけのときは警告を出します）
+- `.env` / `.env.local` は読み込みません。値はリポジトリ外に置いてください
+- スキーマはローカルと同じです。収集ワーカーの初回実行時に同じ DDL で作成されます（画面はテーブルを作りません。テーブルが無い間は空表示）
+
+### 1. Turso の DB とトークンを作る
+
+```bash
+turso db create taskwatch
+turso db show taskwatch --url                         # → TURSO_DATABASE_URL
+turso db tokens create taskwatch                      # 収集ワーカー用（読み書き）
+turso db tokens create taskwatch --read-only          # 画面（Vercel）用（読み取り専用）
+```
+
+画面は読み取りしかしないので、Vercel には読み取り専用トークンを渡すことをおすすめします。
+
+### 2. 既存のローカル DB を Turso にコピーする（任意・1回だけ）
+
+`data/taskwatch.db`（または `TASKWATCH_DB_PATH`）の sessions / meta を Turso にコピーします。同じキーの行は**ローカルの値で丸ごと上書き**し（`INSERT OR REPLACE`）、全件を1つのトランザクションで書き込みます。
+
+1. 動いている収集ワーカー（`--watch`）を止める
+2. `~/.config/taskwatch/env` に `TURSO_DATABASE_URL` と `TURSO_AUTH_TOKEN`（読み書きトークン）を追記する（書き方は手順3と同じ）
+3. 移行を実行する（収集ワーカーの再起動は、移行が終わってから手順3で行う）
+
+```bash
+(set -a && . ~/.config/taskwatch/env && exec npm run migrate:turso)
+```
+
+> [!WARNING]
+> 移行は、収集ワーカーを Turso に向ける**前**に1回だけ実行してください。
+> - 収集ワーカーが Turso に書き込み始めた後に移行を実行すると、Turso 側の新しいセッション行と `meta`（`mode` / `last_collected_at` / `org_id`）が、ローカルの古い値で上書きされます
+> - ローカル向けの収集ワーカーは、移行の前に止めてください。動かしたままだと、移行の後にローカルにだけ書き込まれた分は Turso に反映されません
+> - Turso に切り替えた後は、ローカル DB は使われません。移行をやり直す必要はありません（次の収集で Turso 側が最新の状態になります）
+
+### 3. 収集ワーカー（VM）を Turso に向ける
+
+`~/.config/taskwatch/env`（パーミッション 600、リポジトリ外）に Devin のキーと並べて書きます。
+
+```bash
+#   DEVIN_API_KEY=...
+#   DEVIN_ORG_ID=org-...
+#   TURSO_DATABASE_URL=libsql://taskwatch-<組織名>.turso.io
+#   TURSO_AUTH_TOKEN=...（読み書きトークン）
+(set -a && . ~/.config/taskwatch/env && exec npm run collect -- --watch 60)
+```
+
+### 4. Vercel にデプロイする
+
+1. Vercel で GitHub リポジトリ `ukir-rrrr/taskwatch` をインポートする（Framework: Next.js、ビルドコマンド等は既定のまま）
+2. Project Settings → Environment Variables に次を設定する（Production / Preview など使う環境すべて）
+   - `TURSO_DATABASE_URL`
+   - `TURSO_AUTH_TOKEN`（読み取り専用トークン）
+3. デプロイ（環境変数を後から変えた場合は再デプロイ）
+
+CLI の場合:
+
+```bash
+vercel link
+vercel env add TURSO_DATABASE_URL production
+vercel env add TURSO_AUTH_TOKEN production
+vercel --prod
+```
+
+- Vercel には `DEVIN_API_KEY` / `DEVIN_ORG_ID` を設定しないでください。画面は DB だけを読みます
+- 画面には認証がありません。Vercel に公開する場合は Vercel の Deployment Protection（Vercel Authentication など）で閲覧を制限してください
+
 ## 構成
 
 | パス | 役割 |
 | --- | --- |
-| `scripts/collect.ts` | 収集ワーカー。Devin API（またはダミーデータ）→ SQLite |
+| `scripts/collect.ts` | 収集ワーカー。Devin API（またはダミーデータ）→ SQLite / Turso |
+| `scripts/migrate-to-turso.ts` | ローカル SQLite → Turso のワンオフコピー（`npm run migrate:turso`） |
 | `lib/devin-api.ts` | `GET /v3/organizations/{org_id}/sessions?limit=50` の呼び出し |
 | `lib/devin-status.ts` | `status` / `status_detail` から「要確認／実行中／失敗・異常終了／完了・停止」への分類（分類ロジックはこのファイルに集約） |
 | `lib/activity.ts` | 「いま何をしているか」の一言（`current_activity`）を作る関数。将来 LLM 要約に差し替える前提で独立 |
-| `lib/db.ts` / `lib/queries.ts` | SQLite のスキーマと読み出し |
+| `lib/db.ts` / `lib/queries.ts` | スキーマと DB 接続（ローカル SQLite / Turso の切り替え）、読み出し |
 | `lib/dummy-data.ts` | ダミーモード用データ（モックと同じタスク） |
 | `app/` `components/` | 画面（Mantine）。390px のスマホ幅と 1440px の PC 幅に対応 |
 
