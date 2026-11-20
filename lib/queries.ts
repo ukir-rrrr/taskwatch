@@ -21,10 +21,13 @@ export function loadSnapshot(): Snapshot {
   try {
     const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'").get();
     if (!hasTable) return { sessions: [], lastCollectedAt: null, mode: null };
-    const rows = db.prepare("SELECT * FROM sessions ORDER BY updated_at DESC").all() as RawRow[];
     const meta = Object.fromEntries(
       (db.prepare("SELECT key, value FROM meta").all() as { key: string; value: string }[]).map((m) => [m.key, m.value]),
     );
+    // 直近の収集モードの行だけを出す（ダミーに戻しても実データと混ざらない）
+    const rows = db
+      .prepare("SELECT * FROM sessions WHERE source = ? ORDER BY updated_at DESC")
+      .all(meta.mode ?? "devin") as RawRow[];
     return {
       sessions: rows.map((r) => ({
         ...r,
