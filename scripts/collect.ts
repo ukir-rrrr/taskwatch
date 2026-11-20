@@ -21,7 +21,16 @@ async function collectOnce(): Promise<void> {
     : dummySessions();
 
   const db = openDb()!;
-  if (cred) items.push(...(await refreshDropped(db, cred, items)));
+  const gone: string[] = [];
+  if (cred) {
+    const prevOrg = (db.prepare("SELECT value FROM meta WHERE key = 'org_id'").get() as { value: string } | undefined)?.value;
+    // 組織を切り替えた直後は、前の組織のセッションを新しい組織で探さない
+    if (prevOrg === cred.orgId) {
+      const r = await refreshDropped(db, cred, items);
+      items.push(...r.items);
+      gone.push(...r.gone);
+    }
+  }
   const now = Math.floor(Date.now() / 1000);
   const upsert = db.prepare(`
     INSERT INTO sessions (session_id, title, status, status_detail, acus_consumed, pr_urls, pr_states, url,
@@ -40,6 +49,8 @@ async function collectOnce(): Promise<void> {
   db.transaction(() => {
     // ダミーは毎回作り直す。実データ収集に切り替えたらダミーは消す
     db.prepare("DELETE FROM sessions WHERE source = 'dummy'").run();
+    const del = db.prepare("DELETE FROM sessions WHERE session_id = ?");
+    for (const id of gone) del.run(id);
     for (const it of items) {
       upsert.run({
         session_id: it.session_id,
@@ -60,6 +71,7 @@ async function collectOnce(): Promise<void> {
     }
     setMeta.run("last_collected_at", String(now));
     setMeta.run("mode", mode);
+    if (cred) setMeta.run("org_id", cred.orgId);
   })();
   db.close();
 
@@ -72,7 +84,7 @@ async function refreshDropped(
   db: Database.Database,
   cred: DevinCredentials,
   fetched: DevinSessionItem[],
-): Promise<DevinSessionItem[]> {
+): Promise<{ items: DevinSessionItem[]; gone: string[] }> {
   const seen = new Set(fetched.map((it) => it.session_id));
   const stale = (
     db
@@ -81,13 +93,14 @@ async function refreshDropped(
       )
       .all() as { session_id: string }[]
   ).filter((r) => !seen.has(r.session_id));
-  const out: DevinSessionItem[] = [];
+  const items: DevinSessionItem[] = [];
+  const gone: string[] = [];
   for (const { session_id } of stale) {
     const it = await fetchSession(cred, session_id);
-    if (it) out.push(it);
-    else db.prepare("DELETE FROM sessions WHERE session_id = ?").run(session_id);
+    if (it) items.push(it);
+    else gone.push(session_id);
   }
-  return out;
+  return { items, gone };
 }
 
 async function main(): Promise<void> {
