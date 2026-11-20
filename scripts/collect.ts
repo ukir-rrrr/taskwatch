@@ -2,18 +2,15 @@
  * 収集ワーカー: Devin API からセッション一覧を取得して SQLite に保存する。
  *   npm run collect             1回だけ収集
  *   npm run collect -- --watch 60   60秒ごとに収集し続ける
- * DEVIN_API_KEY / DEVIN_ORG_ID が未設定ならダミーデータを保存する。
+ * DEVIN_API_KEY / DEVIN_ORG_ID はプロセスの環境変数からのみ読む（.env ファイルは読まない）。
+ * 未設定ならダミーデータを保存する。
  */
-import fs from "node:fs";
 import { buildCurrentActivity } from "../lib/activity";
 import { DB_PATH, openDb } from "../lib/db";
 import { fetchSessions, readCredentials, sessionUrl } from "../lib/devin-api";
 import { needsAttention } from "../lib/devin-status";
 import { dummySessions, type DummyItem } from "../lib/dummy-data";
 import type { DevinSessionItem } from "../lib/types";
-
-loadEnvFile(".env.local");
-loadEnvFile(".env");
 
 async function collectOnce(): Promise<void> {
   const cred = readCredentials();
@@ -66,15 +63,6 @@ async function collectOnce(): Promise<void> {
 
   const label = mode === "dummy" ? "ダミーモード（DEVIN_API_KEY / DEVIN_ORG_ID 未設定）" : "Devin API";
   console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存 → ${DB_PATH}`);
-}
-
-function loadEnvFile(file: string): void {
-  if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!m || process.env[m[1]] !== undefined) continue;
-    process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
-  }
 }
 
 async function main(): Promise<void> {

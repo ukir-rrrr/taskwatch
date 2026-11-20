@@ -10,27 +10,43 @@ Devin のセッションを一覧で監視する個人用 Web アプリです。
 
 - Node.js 20 以上
 
-## 起動手順
+## 起動手順（ダミーモード）
+
+`DEVIN_API_KEY` / `DEVIN_ORG_ID` が未設定なら、モックと同じダミーデータで動きます。開発・検証はこのモードで行ってください。
 
 ```bash
 npm install
-
-# 1. 環境変数を設定（任意）
-cp .env.example .env.local
-#   DEVIN_API_KEY=...   Devin の API キー
-#   DEVIN_ORG_ID=org-... 組織 ID
-#   未設定のままなら、モックと同じダミーデータで動くダミーモードになります
-
-# 2. セッションを収集して SQLite に保存
-npm run collect
-#   定期的に収集し続ける場合（秒指定、最短15秒）
-npm run collect -- --watch 60
-
-# 3. 画面を起動 → http://localhost:3000
-npm run dev
+npm run collect   # ダミーデータを data/taskwatch.db に保存
+npm run dev       # → http://localhost:3000
 ```
 
 本番ビルドは `npm run build && npm start` です。
+
+## 実データの収集（運用）
+
+収集ワーカーは `DEVIN_API_KEY` / `DEVIN_ORG_ID` を**プロセスの環境変数からのみ**読みます。`.env` / `.env.local` は読み込みません。
+
+実キーをリポジトリ内（`.env.local` など）に平文で置かないでください。リポジトリを読むツールやエージェントから見えてしまいます。キーはリポジトリ外のファイルに置き、収集ワーカーを起動するときだけ読み込みます。
+
+```bash
+# 1. リポジトリ外にキーのファイルを作る（パーミッション 600）
+mkdir -p ~/.config/taskwatch && chmod 700 ~/.config/taskwatch
+install -m 600 /dev/null ~/.config/taskwatch/env
+#   ~/.config/taskwatch/env をエディタで開き、次の2行を書く
+#   DEVIN_API_KEY=...
+#   DEVIN_ORG_ID=org-...
+
+# 2. 収集ワーカーの起動時だけ読み込む（サブシェル内なので、いまのシェルには残らない）
+(set -a && . ~/.config/taskwatch/env && exec npm run collect)
+#   定期的に収集し続ける場合（秒指定、最短15秒）
+(set -a && . ~/.config/taskwatch/env && exec npm run collect -- --watch 60)
+
+# 3. 画面はキー不要（SQLite だけを読む）
+npm run dev
+```
+
+- 画面（`npm run dev` / `npm start`）にはキーを渡さないでください。画面は SQLite だけを読むので、キーは不要です
+- `.env.example` は変数名の一覧です。値は入れないでください
 
 ## 構成
 
