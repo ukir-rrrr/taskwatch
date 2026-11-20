@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Taskwatch モバイル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FFFFFF;
+  --field:#F6F6F5;
+  --rule:#E3E3E1;
+  --rule-soft:#EEEEEC;
+  --ink:#1A1A1A;
+  --ink-2:#555553;
+  --ink-3:#8E8E8B;
+  --track:#E8E8E6;
+  --fill:#3A3A38;
+  --primary:#1E4F86;
+  --primary-ink:#FFFFFF;
+  --primary-hover:#173F6C;
+  --primary-tint:#EEF3F9;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Noto Sans JP",system-ui,sans-serif;
+  font-size:14px;line-height:1.7;color:var(--ink);
+  background:var(--field);
+  font-feature-settings:"palt" 1;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:2px}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+/* ---------- device ---------- */
+.phone{
+  position:relative;
+  width:100%;max-width:390px;height:100dvh;margin:0 auto;
+  background:var(--paper);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+@media (min-width:520px){
+  body{display:flex;align-items:center;justify-content:center;padding:32px 0}
+  .phone{height:min(844px,calc(100dvh - 64px));border:1px solid var(--rule);border-radius:28px}
+}
+.view{position:absolute;inset:0 0 var(--tabbar-h) 0;overflow-y:auto;overscroll-behavior:contain;background:var(--paper)}
+.view[hidden]{display:none}
+:root{--tabbar-h:64px}
+
+/* ---------- header ---------- */
+.head{
+  position:sticky;top:0;z-index:3;background:var(--paper);
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  padding:18px 20px 12px;
+}
+.head h1{font-size:20px;font-weight:500;letter-spacing:.02em;display:flex;align-items:center;gap:9px}
+.head .when{font-size:12px;color:var(--ink-3)}
+.brand-mark{
+  width:13px;height:13px;border:1.5px solid var(--ink);border-radius:50%;
+  position:relative;flex:none;align-self:center;
+}
+.brand-mark::after{content:"";position:absolute;left:50%;top:1.5px;width:1.5px;height:4.5px;background:var(--ink);transform:translateX(-50%)}
+
+/* ---------- quota band ---------- */
+.quota{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.q-row{
+  display:grid;grid-template-columns:92px minmax(0,1fr) auto;align-items:center;column-gap:12px;
+  padding:9px 20px;
+}
+.q-row + .q-row{border-top:1px solid var(--rule-soft)}
+.q-name{font-size:12.5px;color:var(--ink-2)}
+.q-bar{height:3px;background:var(--track);border-radius:2px;overflow:hidden}
+.q-bar i{display:block;height:100%;background:var(--fill);transform-origin:left;animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
+/* 推定値は破線で塗る：確定値と見分けるため */
+.q-bar.est i{background:repeating-linear-gradient(90deg,var(--fill) 0 4px,transparent 4px 6px)}
+.q-val{font-size:13px;text-align:right;white-space:nowrap}
+.q-val small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.q-note{grid-column:2 / 4;font-size:11px;color:var(--ink-3);margin-top:3px;line-height:1.5}
+.q-tag{display:inline-block;font-size:10.5px;line-height:1;padding:2px 4px;border:1px solid var(--rule);border-radius:3px;color:var(--ink-2);margin-right:5px;vertical-align:1px}
+@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* ---------- groups ---------- */
+.group-head{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:20px 20px 8px;font-size:12px;color:var(--ink-3);
+}
+.group-head b{font-weight:500;color:var(--ink-2);margin-right:6px}
+
+/* review items */
+.reviews{padding:0 16px;display:flex;flex-direction:column;gap:10px}
+.ask{
+  border:1px solid var(--ink);border-radius:6px;padding:12px 14px 14px;
+  transition:opacity .25s, transform .25s;
+}
+.ask.leaving{opacity:0;transform:translateX(24px)}
+.ask-top{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.badge{
+  flex:none;font-size:10.5px;font-weight:500;line-height:1;
+  padding:4px 6px;border-radius:3px;background:var(--ink);color:#fff;letter-spacing:.04em;
+}
+.badge.line{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.ask-name{font-weight:500;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta .sep{display:inline-block;width:1px;height:9px;background:var(--rule);margin:0 7px;vertical-align:-1px}
+.ask-q{margin:10px 0 2px;line-height:1.65}
+.ask-note{font-size:12px;color:var(--ink-3);line-height:1.6}
+.ask-actions{display:flex;gap:8px;margin-top:12px}
+.btn{
+  flex:1;text-align:center;
+  padding:9px 14px;border-radius:5px;border:1px solid var(--rule);
+  background:var(--paper);color:var(--ink);font-weight:500;
+}
+.btn:active{background:var(--field)}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}
+.btn-primary:active{background:var(--primary-hover)}
+
+/* session rows */
+.row{
+  display:grid;grid-template-columns:14px minmax(0,1fr) auto;column-gap:10px;row-gap:7px;
+  padding:12px 20px;border-top:1px solid var(--rule-soft);
+}
+.group-head + .row{border-top-color:var(--rule)}
+.dot{width:8px;height:8px;border-radius:50%;justify-self:center;margin-top:7px}
+.dot.run{background:var(--fill);animation:pulse 2.4s ease-in-out infinite}
+.dot.fail{border-radius:1px;width:9px;height:9px;background:var(--paper);box-shadow:inset 0 0 0 2px var(--ink);position:relative}
+.dot.fail::after{content:"";position:absolute;inset:3.5px 2px auto;height:2px;background:var(--ink)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.r-main{min-width:0}
+.r-title{display:flex;align-items:center;gap:7px;min-width:0}
+.r-title span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r-now{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin-top:1px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.r-min{font-size:12px;color:var(--ink-3);padding-top:2px;text-align:right;white-space:nowrap}
+.bar{grid-column:2 / 4;height:2px;background:var(--track);border-radius:1px;overflow:hidden;position:relative}
+.bar i{display:block;height:100%;background:var(--fill)}
+/* 失敗：止まった地点に刻みを入れ、その先を破線で残す */
+.row.is-fail .bar{background:repeating-linear-gradient(90deg,var(--rule) 0 3px,transparent 3px 6px)}
+.row.is-fail .bar i{background:var(--ink);position:relative}
+.row.is-fail .bar i::after{content:"";position:absolute;right:0;top:-3px;width:2px;height:8px;background:var(--ink)}
+.row.is-fail .bar{overflow:visible}
+.row.is-fail .r-now{color:var(--ink)}
+
+.done-link{
+  display:flex;justify-content:space-between;align-items:center;width:100%;
+  padding:14px 20px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  margin-top:20px;color:var(--ink-2);font-size:13px;
+}
+.done-link .go{color:var(--primary);font-weight:500}
+.foot-space{height:28px}
+
+/* ---------- reports list ---------- */
+.lede{padding:0 20px 14px;font-size:12.5px;color:var(--ink-3)}
+.rep{
+  display:block;width:100%;padding:13px 20px 14px;border-top:1px solid var(--rule-soft);
+}
+.group-head + .rep{border-top-color:var(--rule)}
+.rep:active{background:var(--field)}
+.rep-title{font-weight:500;line-height:1.55;margin-bottom:3px}
+.rep-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px}
+.diff{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)}
+.diff-bar{display:flex;gap:1px;width:56px;height:5px}
+.diff-bar i{display:block;height:100%;border-radius:1px}
+.diff-bar .a{background:var(--fill)}
+.diff-bar .d{background:var(--paper);box-shadow:inset 0 0 0 1px #B9B9B6}
+.rep-time{font-size:12px;color:var(--ink-3)}
+
+/* ---------- report detail (slides over) ---------- */
+.detail{
+  position:absolute;inset:0 0 var(--tabbar-h) 0;z-index:5;background:var(--paper);overflow-y:auto;
+  transform:translateX(100%);transition:transform .32s cubic-bezier(.2,.8,.2,1);
+  visibility:hidden;
+}
+.detail.open{transform:none;visibility:visible}
+.d-bar{
+  position:sticky;top:0;z-index:2;background:var(--paper);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 12px 10px;border-bottom:1px solid var(--rule);
+}
+.back{display:flex;align-items:center;gap:4px;padding:4px 8px;color:var(--primary);font-weight:500}
+.back svg{width:16px;height:16px}
+.d-bar .meta{padding-right:8px}
+.d-head{padding:18px 20px 16px}
+.d-head h2{font-size:17px;font-weight:500;line-height:1.55;margin:4px 0 14px}
+.d-stats{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--rule);border-radius:5px}
+.d-stats div{padding:7px 10px}
+.d-stats div + div{border-left:1px solid var(--rule)}
+.d-stats dt{font-size:11px;color:var(--ink-3)}
+.d-stats dd{font-size:13.5px}
+.d-sec{padding:18px 20px 20px;border-top:1px solid var(--rule)}
+.d-sec h3{font-size:12.5px;font-weight:500;color:var(--ink-2);margin-bottom:10px}
+.did{list-style:none}
+.did li{position:relative;padding:3px 0 3px 14px;line-height:1.65}
+.did li::before{content:"";position:absolute;left:0;top:12px;width:5px;height:1px;background:var(--ink-3)}
+
+.pick + .pick{margin-top:22px}
+.pick-file{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink-2);margin-bottom:6px}
+.pick-file b{font-weight:500;color:var(--ink);font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-file span{color:var(--ink-3);flex:none}
+.code{
+  background:var(--field);border:1px solid var(--rule-soft);border-radius:5px;
+  font-family:var(--mono);font-size:11.5px;line-height:1.65;
+  overflow-x:auto;padding:8px 0;
+}
+.code div{padding:0 12px;white-space:pre;border-left:2px solid transparent}
+.code .hl{background:var(--primary-tint);border-left-color:var(--primary)}
+.code .c{color:var(--ink-3)}
+.why{margin-top:10px;padding-left:12px;border-left:1px solid var(--ink)}
+.why strong{display:block;font-size:11.5px;font-weight:500;color:var(--ink-2);margin-bottom:1px}
+.why p{font-size:13px;line-height:1.7}
+
+/* ---------- tab bar ---------- */
+.tabbar{
+  position:absolute;left:0;right:0;bottom:0;height:var(--tabbar-h);z-index:6;
+  display:grid;grid-template-columns:1fr 1fr;
+  background:var(--paper);border-top:1px solid var(--rule);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.tab{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  color:var(--ink-3);font-size:11px;position:relative;
+}
+.tab svg{width:22px;height:22px}
+.tab[aria-selected="true"]{color:var(--primary)}
+.tab[aria-selected="true"]::before{content:"";position:absolute;top:-1px;left:50%;width:28px;height:2px;background:var(--primary);transform:translateX(-50%)}
+.tab .cnt{
+  position:absolute;top:8px;left:calc(50% + 7px);
+  min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+  background:var(--ink);color:#fff;font-size:10px;line-height:16px;text-align:center;
+}
+
+.toast{
+  position:absolute;left:50%;bottom:calc(var(--tabbar-h) + 14px);z-index:9;
+  transform:translate(-50%,8px);white-space:nowrap;
+  background:var(--ink);color:#fff;padding:8px 14px;border-radius:5px;font-size:12.5px;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.empty{margin:0 16px;padding:14px;border:1px dashed var(--rule);border-radius:6px;color:var(--ink-3);font-size:12.5px}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <!-- ========== セッション ========== -->
+  <section class="view" id="v-sessions" aria-label="セッション">
+    <header class="head">
+      <h1><span class="brand-mark" aria-hidden="true"></span>セッション</h1>
+      <span class="when num">14:32 更新</span>
+    </header>
+
+    <div class="quota" aria-label="エージェント別の残量">
+      <div class="q-row">
+        <span class="q-name">Devin</span>
+        <div class="q-bar" role="meter" aria-valuemin="0" aria-valuemax="250" aria-valuenow="142" aria-label="Devin ACU残量"><i style="width:56.8%"></i></div>
+        <span class="q-val num">142<small>/ 250 ACU</small></span>
+        <span class="q-note">今月の残り。12月1日にリセット</span>
+      </div>
+      <div class="q-row">
+        <span class="q-name">Claude Code</span>
+        <div class="q-bar est" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="38" aria-label="Claude Code 利用枠の推定残量"><i style="width:38%"></i></div>
+        <span class="q-val num">約38<small>%</small></span>
+        <span class="q-note"><span class="q-tag">目安</span>直近5時間の利用量から推定。16:10ごろ回復</span>
+      </div>
+    </div>
+
+    <div class="group-head"><span><b>要確認</b><span class="num" id="rev-count"></span></span><span>あなたの判断待ち</span></div>
+    <div class="reviews" id="reviews"></div>
+
+    <div class="group-head"><span><b>失敗・異常終了</b><span class="num" id="fail-count"></span></span><span>再実行するか確認</span></div>
+    <div id="fails"></div>
+
+    <div class="group-head"><span><b>実行中</b><span class="num" id="run-count"></span></span><span>経過時間</span></div>
+    <div id="runs"></div>
+
+    <button class="done-link" id="to-reports">
+      <span>今日完了した <span class="num">3</span> 件</span>
+      <span class="go">レポートを見る</span>
+    </button>
+    <div class="foot-space"></div>
+  </section>
+
+  <!-- ========== レポート ========== -->
+  <section class="view" id="v-reports" aria-label="レポート" hidden>
+    <header class="head">
+      <h1><span class="brand-mark" aria-hidden="true"></span>レポート</h1>
+      <span class="when num">14:32 更新</span>
+    </header>
+    <p class="lede">エージェントが作成し、完了したプルリクエストの記録です。</p>
+    <div id="rep-list"></div>
+    <div class="foot-space"></div>
+  </section>
+
+  <!-- ========== レポート詳細 ========== -->
+  <section class="detail" id="detail" aria-label="レポート詳細" aria-hidden="true"></section>
+
+  <nav class="tabbar" role="tablist" aria-label="画面の切り替え">
+    <button class="tab" role="tab" id="tab-sessions" aria-selected="true" aria-controls="v-sessions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="5" cy="6.5" r="1.4"/><circle cx="5" cy="12" r="1.4"/><circle cx="5" cy="17.5" r="1.4"/><path d="M9.5 6.5h10M9.5 12h10M9.5 17.5h6"/></svg>
+      セッション
+      <span class="cnt num" id="tab-cnt"></span>
+    </button>
+    <button class="tab" role="tab" id="tab-reports" aria-selected="false" aria-controls="v-reports">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M6 3.5h8.5L18.5 7.5V20.5H6z"/><path d="M14.5 3.5v4h4M9 12h6.5M9 15.5h6.5"/></svg>
+      レポート
+    </button>
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script>
+/* ---------- ダミーデータ ---------- */
+const reviews = [
+  {id:"s1", agent:"Claude Code", repo:"payments-api", name:"決済Webhookの再送処理を追加", min:38,
+   q:"再送の上限を5回から8回に変更してよいですか。", note:"仕様書は5回、決済代行サービス側の推奨は8回です。"},
+  {id:"s2", agent:"Devin", repo:"storefront", name:"Next.js 15 へのアップグレード", min:112,
+   q:"画像最適化の設定を新方式に置き換えました。プレビューで商品一覧の表示を確認してください。", note:"商品一覧と商品詳細の2画面で見た目が変わる可能性があります。"},
+  {id:"s3", agent:"Claude Code", repo:"admin-web", name:"Sentry通知のノイズを削減", min:21,
+   q:"発生頻度の低い12種類のエラーを通知対象から外します。", note:"過去30日で発生が3回未満のものに限ります。"},
+];
+const fails = [
+  {id:"f1", kind:"失敗", agent:"Devin", repo:"storefront", name:"決済画面のアクセシビリティ修正", done:9, total:14, min:52,
+   now:"E2Eテスト 3件が失敗したまま停止。カード番号欄のラベル変更が原因"},
+  {id:"f2", kind:"異常終了", agent:"Claude Code", repo:"inventory-worker", name:"倉庫APIクライアントの型定義を生成", done:4, total:11, min:17,
+   now:"14:19 に応答が途絶えました。生成途中のファイルは未コミット"},
+];
+const runs = [
+  {agent:"Devin", repo:"inventory-worker", name:"在庫同期バッチのタイムアウト対策", done:12, total:18, min:46, now:"500件ずつ分けて同期する処理を実装中"},
+  {agent:"Devin", repo:"admin-web", name:"管理画面の権限チェックを共通化", done:9, total:15, min:33, now:"注文管理画面に適用。残り6画面"},
+  {agent:"Devin", repo:"storefront", name:"配送料計算のテストを追加", done:7, total:10, min:28, now:"同梱時の料金パターンを追加中"},
+  {agent:"Claude Code", repo:"storefront", name:"E2Eテストの不安定な失敗を調査", done:5, total:12, min:17, now:"カート画面のテストを20回連続で実行中。3回失敗"},
+  {agent:"Claude Code", repo:"payments-api", name:"依存パッケージの脆弱性に対応", done:3, total:9, min:9, now:"脆弱性7件の影響範囲を調査中"},
+];
+
+const reports = [
+  {id:"r1", day:"今日", time:"13:48", agent:"Claude Code", repo:"admin-web", pr:412,
+   title:"注文CSVエクスポートの文字化けを修正", add:64, del:18, files:4, took:"24分",
+   did:[
+     "Excelで開くと日本語が化ける原因を、BOMなしのUTF-8出力と特定",
+     "出力の先頭にBOMを付け、改行をCRLFに統一",
+     "1万件を超える注文でもメモリを使い切らないよう、逐次書き出しに変更",
+     "Excel・Numbers・Googleスプレッドシートで開けることをテストで確認",
+   ],
+   picks:[
+     {file:"src/export/orderCsv.ts", lines:"L12–19",
+      code:[["// Excel は BOM がないと Shift_JIS として読む","c"],["const BOM = \"\\uFEFF\";",""],["",""],["export function* orderCsvRows(orders) {",""],["  yield BOM + HEADER.join(\",\") + \"\\r\\n\";","hl"],["  for (const o of orders) {",""],["    yield toRow(o).join(\",\") + \"\\r\\n\";","hl"],["  }",""],["}",""]],
+      why:"文字コードをShift_JISに変えると絵文字や旧字の注文者名が欠けるため、UTF-8のままBOMで判別させました。改行もExcelが期待するCRLFに合わせています。"},
+     {file:"src/export/escape.ts", lines:"L3–8",
+      code:[["export function cell(v: string) {",""],["  const s = v.replace(/\"/g, '\"\"');","hl"],["  // 先頭が = + - @ だと数式として実行される","c"],["  return /^[=+\\-@]/.test(s) ? `\"'${s}\"` : `\"${s}\"`;","hl"],["}",""]],
+      why:"備考欄に「=」から始まる文字列があると、Excelが数式として実行してしまいます。CSVインジェクション対策として、先頭に ' を付けて文字列扱いにしました。"},
+     {file:"src/routes/export.ts", lines:"L22–27",
+      code:[["const stream = Readable.from(orderCsvRows(cursor));","hl"],["res.setHeader(\"Content-Type\", \"text/csv; charset=utf-8\");",""],["stream.pipe(res);",""]],
+      why:"以前は全件を配列に溜めてから返しており、大口顧客の出力でメモリ上限に達していました。データベースのカーソルから1行ずつ流す形にしています。"},
+   ]},
+  {id:"r2", day:"今日", time:"11:33", agent:"Devin", repo:"storefront", pr:1287,
+   title:"会員登録フォームの入力チェックを改善", add:212, del:97, files:9, took:"41分",
+   did:[
+     "フォームごとに散らばっていた入力チェックを1つのスキーマにまとめた",
+     "エラー表示を送信時から、入力欄を離れたときに変更",
+     "全角数字の電話番号・郵便番号を自動で半角に変換",
+   ],
+   picks:[
+     {file:"app/signup/schema.ts", lines:"L8–15",
+      code:[["export const signupSchema = z.object({",""],["  email: z.string().email(\"メールアドレスの形式が正しくありません\"),",""],["  tel: z.string()",""],["    .transform(toHalfWidth)","hl"],["    .pipe(z.string().regex(/^0\\d{9,10}$/)),",""],["});",""]],
+      why:"利用者が全角で入力しても弾かずに変換してから検証します。エラーにするより、意図が明らかな入力は受け入れる方が離脱が少ないためです。"},
+     {file:"app/signup/Field.tsx", lines:"L30–34",
+      code:[["const [touched, setTouched] = useState(false);",""],["const error = touched ? validate(value) : null;","hl"],["return <input onBlur={() => setTouched(true)} … />;",""]],
+      why:"入力の途中でエラーが出ると「まだ書いている途中なのに」と感じさせます。欄を離れてから初めて検証を表示するようにしました。"},
+   ]},
+  {id:"r3", day:"今日", time:"10:30", agent:"Claude Code", repo:"payments-api", pr:356,
+   title:"APIドキュメントの自動生成を追加", add:148, del:6, files:5, took:"15分",
+   did:[
+     "ルート定義からOpenAPI形式の仕様書を生成するスクリプトを追加",
+     "プルリクエストごとに仕様書の差分を確認できるCIを設定",
+   ],
+   picks:[
+     {file:"scripts/gen-openapi.ts", lines:"L4–10",
+      code:[["for (const route of app.routes) {",""],["  if (route.meta?.internal) continue;","hl"],["  spec.paths[route.path] ??= {};",""],["  spec.paths[route.path][route.method] = describe(route);",""],["}",""]],
+      why:"社内向けの管理用エンドポイントが外部向け仕様書に載らないよう、internal 指定のルートを除外しています。"},
+     {file:".github/workflows/openapi.yml", lines:"L14–17",
+      code:[["- run: npm run gen:openapi",""],["- run: git diff --exit-code openapi.yaml","hl"]],
+      why:"仕様書の更新し忘れをCIで止めます。コードを変えたのに仕様書が古いままだと、差分ありとして失敗させます。"},
+   ]},
+  {id:"r4", day:"昨日", time:"17:52", agent:"Devin", repo:"inventory-worker", pr:203,
+   title:"商品検索のページ送りを修正", add:41, del:23, files:3, took:"32分",
+   did:[
+     "2ページ目以降で同じ商品が重複する問題を、並び順が一意でないことと特定",
+     "並び替えキーに商品IDを追加し、順序を確定",
+   ],
+   picks:[
+     {file:"src/search/query.ts", lines:"L18–21",
+      code:[["ORDER BY updated_at DESC,",""],["         id DESC          -- 同時刻の商品の順序を固定","hl"],["LIMIT $1 OFFSET $2",""]],
+      why:"一括更新で updated_at が同じ商品が多数あり、ページごとに順序が入れ替わっていました。一意な id を最後のキーに加えて順序を固定しました。"},
+     {file:"test/search/paging.test.ts", lines:"L9–14",
+      code:[["const ids = (await allPages()).map(p => p.id);",""],["expect(new Set(ids).size).toBe(ids.length);","hl"]],
+      why:"全ページを取得して重複がないことを直接確かめるテストです。再発した場合に原因箇所がすぐ分かります。"},
+   ]},
+  {id:"r5", day:"昨日", time:"15:06", agent:"Claude Code", repo:"admin-web", pr:409,
+   title:"ログイン履歴の画面に絞り込みを追加", add:186, del:31, files:7, took:"48分",
+   did:[
+     "期間・IPアドレス・成否で絞り込めるようにした",
+     "絞り込み条件をURLに残し、共有や再読み込みで消えないようにした",
+   ],
+   picks:[
+     {file:"src/pages/loginHistory.tsx", lines:"L22–26",
+      code:[["const [params, setParams] = useSearchParams();","hl"],["const filter = parseFilter(params);",""]],
+      why:"不審なログインの調査ではURLを同僚に送ることが多いため、条件を画面の状態ではなくURLに持たせました。"},
+     {file:"src/api/loginHistory.ts", lines:"L11–15",
+      code:[["// 最大90日に制限：全期間検索でDBが重くなるため","c"],["const from = max(filter.from, subDays(now, 90));","hl"]],
+      why:"期間指定なしで全件を検索すると数千万行を走査します。監査要件の90日に合わせて上限を設けました。"},
+   ]},
+];
+
+/* ---------- 描画 ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtMin = m => m >= 60 ? `${Math.floor(m/60)}時間${m%60}分` : `${m}分`;
+const sep = '<span class="sep" aria-hidden="true"></span>';
+
+function renderReviews(){
+  const box = $("#reviews");
+  box.innerHTML = reviews.length ? reviews.map(r => `
+    <article class="ask" data-id="${r.id}">
+      <div class="ask-top"><span class="badge">要確認</span><span class="ask-name">${esc(r.name)}</span></div>
+      <div class="meta">${r.agent}${sep}${r.repo}${sep}<span class="num">${fmtMin(r.min)}</span></div>
+      <p class="ask-q">${esc(r.q)}</p>
+      <p class="ask-note">${esc(r.note)}</p>
+      <div class="ask-actions">
+        <button class="btn" data-act="却下">却下</button>
+        <button class="btn btn-primary" data-act="承認">承認</button>
+      </div>
+    </article>`).join("") : `<p class="empty">判断待ちのセッションはありません。</p>`;
+  $("#rev-count").textContent = reviews.length;
+  const cnt = $("#tab-cnt");
+  cnt.textContent = reviews.length; cnt.hidden = !reviews.length;
+}
+
+function rowHTML(s, fail){
+  const pct = Math.round(s.done / s.total * 100);
+  return `
+    <div class="row${fail ? " is-fail" : ""}">
+      <span class="dot ${fail ? "fail" : "run"}" aria-hidden="true"></span>
+      <div class="r-main">
+        <div class="r-title">${fail ? `<span class="badge line">${s.kind}</span>` : ""}<span>${esc(s.name)}</span></div>
+        <p class="r-now">${esc(s.now)}</p>
+      </div>
+      <span class="r-min num">${fmtMin(s.min)}</span>
+      <div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(s.name)} ${s.done}/${s.total}ステップ"><i style="width:${pct}%"></i></div>
+    </div>`;
+}
+
+function renderSessions(){
+  renderReviews();
+  $("#fails").innerHTML = fails.map(s => rowHTML(s, true)).join("");
+  $("#runs").innerHTML = runs.map(s => rowHTML(s, false)).join("");
+  $("#fail-count").textContent = fails.length;
+  $("#run-count").textContent = runs.length;
+}
+
+function renderReports(){
+  let html = "", day = "";
+  for (const r of reports){
+    if (r.day !== day){ day = r.day; html += `<div class="group-head"><span><b>${day}</b></span><span class="num">${reports.filter(x=>x.day===day).length} 件</span></div>`; }
+    const tot = r.add + r.del;
+    html += `
+      <button class="rep" data-id="${r.id}">
+        <p class="rep-title">${esc(r.title)}</p>
+        <div class="meta">${r.repo} <span class="num">#${r.pr}</span>${sep}${r.agent}</div>
+        <div class="rep-foot">
+          <span class="diff num" aria-label="追加${r.add}行、削除${r.del}行、${r.files}ファイル">
+            <span class="diff-bar" aria-hidden="true"><i class="a" style="width:${r.add/tot*100}%"></i><i class="d" style="width:${r.del/tot*100}%"></i></span>
+            +${r.add} −${r.del}${sep}${r.files}ファイル
+          </span>
+          <span class="rep-time num">${r.time} 完了</span>
+        </div>
+      </button>`;
+  }
+  $("#rep-list").innerHTML = html;
+}
+
+function renderDetail(r){
+  $("#detail").innerHTML = `
+    <div class="d-bar">
+      <button class="back" id="back"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>レポート</button>
+      <span class="meta num">${r.day} ${r.time} 完了</span>
+    </div>
+    <div class="d-head">
+      <div class="meta">${r.repo} <span class="num">#${r.pr}</span>${sep}${r.agent}</div>
+      <h2>${esc(r.title)}</h2>
+      <dl class="d-stats">
+        <div><dt>変更行数</dt><dd class="num">+${r.add} −${r.del}</dd></div>
+        <div><dt>ファイル</dt><dd class="num">${r.files}</dd></div>
+        <div><dt>所要時間</dt><dd class="num">${r.took}</dd></div>
+      </dl>
+    </div>
+    <section class="d-sec">
+      <h3>やったこと</h3>
+      <ul class="did">${r.did.map(d => `<li>${esc(d)}</li>`).join("")}</ul>
+    </section>
+    <section class="d-sec">
+      <h3>重要なコード</h3>
+      ${r.picks.map(p => `
+        <div class="pick">
+          <div class="pick-file"><b>${esc(p.file)}</b><span class="num">${p.lines}</span></div>
+          <div class="code" tabindex="0" aria-label="${esc(p.file)} のコード">${p.code.map(([t,c]) => `<div${c ? ` class="${c}"` : ""}>${esc(t) || " "}</div>`).join("")}</div>
+          <div class="why"><strong>こう書いた理由</strong><p>${esc(p.why)}</p></div>
+        </div>`).join("")}
+    </section>
+    <div class="foot-space"></div>`;
+  $("#back").addEventListener("click", () => { location.hash = "#reports"; });
+}
+
+/* ---------- 画面遷移（URLハッシュ） ---------- */
+function route(){
+  const h = location.hash.slice(1) || "sessions";
+  const [view, id] = h.split("/");
+  const isRep = view === "reports" || view === "report";
+  $("#v-sessions").hidden = isRep;
+  $("#v-reports").hidden = !isRep;
+  $("#tab-sessions").setAttribute("aria-selected", !isRep);
+  $("#tab-reports").setAttribute("aria-selected", isRep);
+  const d = $("#detail");
+  const r = view === "report" && reports.find(x => x.id === id);
+  if (r){ renderDetail(r); d.scrollTop = 0; d.classList.add("open"); d.setAttribute("aria-hidden","false"); }
+  else { d.classList.remove("open"); d.setAttribute("aria-hidden","true"); }
+}
+
+/* ---------- 操作 ---------- */
+let toastTimer;
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+$("#reviews").addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const card = b.closest(".ask"); const id = card.dataset.id;
+  const r = reviews.find(x => x.id === id);
+  card.classList.add("leaving");
+  setTimeout(() => {
+    reviews.splice(reviews.indexOf(r), 1);
+    if (b.dataset.act === "承認") runs.unshift({agent:r.agent, repo:r.repo, name:r.name, done:1, total:4, min:r.min, now:"承認を受けて再開"});
+    renderSessions();
+  }, 250);
+  toast(`「${r.name}」を${b.dataset.act}しました`);
+});
+
+$("#rep-list").addEventListener("click", e => {
+  const b = e.target.closest(".rep"); if (b) location.hash = `#report/${b.dataset.id}`;
+});
+$("#tab-sessions").addEventListener("click", () => { location.hash = "#sessions"; });
+$("#tab-reports").addEventListener("click", () => { location.hash = "#reports"; });
+$("#to-reports").addEventListener("click", () => { location.hash = "#reports"; });
+window.addEventListener("hashchange", route);
+
+renderSessions();
+renderReports();
+route();
+</script>
+</body>
+</html>
