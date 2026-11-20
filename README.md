@@ -74,7 +74,25 @@ turso db tokens create taskwatch --read-only          # 画面（Vercel）用（
 
 画面は読み取りしかしないので、Vercel には読み取り専用トークンを渡すことをおすすめします。
 
-### 2. 収集ワーカー（VM）を Turso に向ける
+### 2. 既存のローカル DB を Turso にコピーする（任意・1回だけ）
+
+`data/taskwatch.db`（または `TASKWATCH_DB_PATH`）の sessions / meta を Turso にコピーします。同じキーの行は**ローカルの値で丸ごと上書き**し（`INSERT OR REPLACE`）、全件を1つのトランザクションで書き込みます。
+
+1. 動いている収集ワーカー（`--watch`）を止める
+2. `~/.config/taskwatch/env` に `TURSO_DATABASE_URL` と `TURSO_AUTH_TOKEN`（読み書きトークン）を追記する（書き方は手順3と同じ）
+3. 移行を実行する（収集ワーカーの再起動は、移行が終わってから手順3で行う）
+
+```bash
+(set -a && . ~/.config/taskwatch/env && exec npm run migrate:turso)
+```
+
+> [!WARNING]
+> 移行は、収集ワーカーを Turso に向ける**前**に1回だけ実行してください。
+> - 収集ワーカーが Turso に書き込み始めた後に移行を実行すると、Turso 側の新しいセッション行と `meta`（`mode` / `last_collected_at` / `org_id`）が、ローカルの古い値で上書きされます
+> - ローカル向けの収集ワーカーは、移行の前に止めてください。動かしたままだと、移行の後にローカルにだけ書き込まれた分は Turso に反映されません
+> - Turso に切り替えた後は、ローカル DB は使われません。移行をやり直す必要はありません（次の収集で Turso 側が最新の状態になります）
+
+### 3. 収集ワーカー（VM）を Turso に向ける
 
 `~/.config/taskwatch/env`（パーミッション 600、リポジトリ外）に Devin のキーと並べて書きます。
 
@@ -84,14 +102,6 @@ turso db tokens create taskwatch --read-only          # 画面（Vercel）用（
 #   TURSO_DATABASE_URL=libsql://taskwatch-<組織名>.turso.io
 #   TURSO_AUTH_TOKEN=...（読み書きトークン）
 (set -a && . ~/.config/taskwatch/env && exec npm run collect -- --watch 60)
-```
-
-### 3. 既存のローカル DB を Turso にコピーする（任意・1回だけ）
-
-`data/taskwatch.db`（または `TASKWATCH_DB_PATH`）の sessions / meta を Turso にコピーします。同じキーの行は上書きし、全件を1つのトランザクションで書き込みます。
-
-```bash
-(set -a && . ~/.config/taskwatch/env && exec npm run migrate:turso)
 ```
 
 ### 4. Vercel にデプロイする
