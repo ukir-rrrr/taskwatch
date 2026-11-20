@@ -37,7 +37,8 @@ export function SessionsView({ sessions, now, header }: Props) {
   const failed = by("failed");
   const done = by("done");
 
-  const isMobile = useMediaQuery("(max-width: 767px)");
+  // 1180px 以下は右の詳細パネルを出さず、下からのドロワーで詳細を見せる
+  const isMobile = useMediaQuery("(max-width: 1180px)");
   const [selectedId, setSelectedId] = useState<string | null>(attention[0]?.session_id ?? items[0]?.session_id ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const selected = items.find((x) => x.session_id === selectedId) ?? null;

@@ -147,7 +147,8 @@
 /* 中間幅 */
 @media (max-width: 1180px) {
   .app { grid-template-columns: 200px minmax(0, 1fr); }
-  .page { grid-template-columns: minmax(0, 1fr) 320px; }
+  .page { grid-template-columns: minmax(0, 1fr); }
+  .panel { display: none; }
   .cols { grid-template-columns: 14px minmax(0, 1fr) 56px 64px; }
   .cols > .rState, .listHead .hState { display: none; }
   .ask { grid-template-columns: 1fr; }
