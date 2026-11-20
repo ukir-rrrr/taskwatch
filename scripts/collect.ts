@@ -1,0 +1,93 @@
+/**
+ * 収集ワーカー: Devin API からセッション一覧を取得して SQLite に保存する。
+ *   npm run collect             1回だけ収集
+ *   npm run collect -- --watch 60   60秒ごとに収集し続ける
+ * DEVIN_API_KEY / DEVIN_ORG_ID が未設定ならダミーデータを保存する。
+ */
+import fs from "node:fs";
+import { buildCurrentActivity } from "../lib/activity";
+import { DB_PATH, openDb } from "../lib/db";
+import { fetchSessions, readCredentials, sessionUrl } from "../lib/devin-api";
+import { needsAttention } from "../lib/devin-status";
+import { dummySessions, type DummyItem } from "../lib/dummy-data";
+import type { DevinSessionItem } from "../lib/types";
+
+loadEnvFile(".env.local");
+loadEnvFile(".env");
+
+async function collectOnce(): Promise<void> {
+  const cred = readCredentials();
+  const mode = cred ? "devin" : "dummy";
+  const items: (DevinSessionItem & Partial<Pick<DummyItem, "latest_message">>)[] = cred
+    ? await fetchSessions(cred, 50)
+    : dummySessions();
+
+  const db = openDb()!;
+  const now = Math.floor(Date.now() / 1000);
+  const upsert = db.prepare(`
+    INSERT INTO sessions (session_id, title, status, status_detail, acus_consumed, pr_urls, pr_states, url,
+      created_at, updated_at, first_seen_at, needs_attention, current_activity, source)
+    VALUES (@session_id, @title, @status, @status_detail, @acus_consumed, @pr_urls, @pr_states, @url,
+      @created_at, @updated_at, @first_seen_at, @needs_attention, @current_activity, @source)
+    ON CONFLICT (session_id) DO UPDATE SET
+      title = excluded.title, status = excluded.status, status_detail = excluded.status_detail,
+      acus_consumed = excluded.acus_consumed, pr_urls = excluded.pr_urls, pr_states = excluded.pr_states,
+      url = excluded.url, created_at = excluded.created_at, updated_at = excluded.updated_at,
+      needs_attention = excluded.needs_attention, current_activity = excluded.current_activity,
+      source = excluded.source
+  `);
+  const setMeta = db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
+
+  db.transaction(() => {
+    // ダミーは毎回作り直す。実データ収集に切り替えたらダミーは消す
+    db.prepare("DELETE FROM sessions WHERE source = 'dummy'").run();
+    for (const it of items) {
+      upsert.run({
+        session_id: it.session_id,
+        title: it.title?.trim() || "（無題のセッション）",
+        status: it.status,
+        status_detail: it.status_detail ?? null,
+        acus_consumed: it.acus_consumed ?? 0,
+        pr_urls: JSON.stringify(it.pull_requests.map((p) => p.pr_url)),
+        pr_states: JSON.stringify(it.pull_requests.map((p) => p.pr_state)),
+        url: sessionUrl(it),
+        created_at: it.created_at,
+        updated_at: it.updated_at,
+        first_seen_at: now,
+        needs_attention: needsAttention(it.status, it.status_detail ?? null) ? 1 : 0,
+        current_activity: buildCurrentActivity(it),
+        source: mode,
+      });
+    }
+    setMeta.run("last_collected_at", String(now));
+    setMeta.run("mode", mode);
+  })();
+  db.close();
+
+  const label = mode === "dummy" ? "ダミーモード（DEVIN_API_KEY / DEVIN_ORG_ID 未設定）" : "Devin API";
+  console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存 → ${DB_PATH}`);
+}
+
+function loadEnvFile(file: string): void {
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+    if (!m || process.env[m[1]] !== undefined) continue;
+    process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
+  }
+}
+
+async function main(): Promise<void> {
+  const i = process.argv.indexOf("--watch");
+  const interval = i >= 0 ? Math.max(15, Number(process.argv[i + 1]) || 60) : 0;
+  if (!interval) return collectOnce();
+  for (;;) {
+    await collectOnce().catch((e) => console.error(`[collect] 失敗: ${(e as Error).message}`));
+    await new Promise((r) => setTimeout(r, interval * 1000));
+  }
+}
+
+main().catch((e) => {
+  console.error(`[collect] 失敗: ${(e as Error).message}`);
+  process.exit(1);
+});
