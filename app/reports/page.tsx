@@ -4,8 +4,8 @@ import { loadSnapshot } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default function ReportsPage() {
-  const snapshot = loadSnapshot();
+export default async function ReportsPage() {
+  const snapshot = await loadSnapshot();
   return (
     <AppFrame active="reports" snapshot={snapshot}>
       <div className={`${s.page} ${s.single}`}>
