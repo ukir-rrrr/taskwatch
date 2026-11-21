@@ -35,18 +35,8 @@ export async function syncReports(
   mode: "devin" | "dummy",
   fetchMeta: typeof fetchPrMeta = fetchPrMeta,
 ): Promise<ReportSync> {
-  const open = new Map<string, DevinSessionItem>();
-  const statements: Statement[] = [];
-  for (const it of items) {
-    for (const pr of it.pull_requests) {
-      const state = pr.pr_state?.toLowerCase() ?? null;
-      if (state === "open") {
-        if (!open.has(pr.pr_url)) open.set(pr.pr_url, it);
-      } else if (state) {
-        statements.push({ sql: "UPDATE reports SET pr_state = ? WHERE pr_url = ?", args: [state, pr.pr_url] });
-      }
-    }
-  }
+  const prs = items.flatMap((it) => it.pull_requests.map((pr) => ({ it, url: pr.pr_url, state: pr.pr_state?.toLowerCase() ?? null })));
+  const open = new Set(prs.filter((p) => p.state === "open").map((p) => p.url));
 
   const metas = new Map<string, PrMeta>();
   let attempted = 0;
@@ -59,7 +49,7 @@ export async function syncReports(
     const unsynced = (
       await db.all<{ pr_url: string }>("SELECT pr_url FROM reports WHERE status = 'pending' AND github_synced_at IS NULL")
     ).map((r) => r.pr_url);
-    const targets = [...new Set([...[...open.keys()].filter((u) => !known.has(u)), ...unsynced])];
+    const targets = [...new Set([...[...open].filter((u) => !known.has(u)), ...unsynced])];
     for (const url of targets) {
       attempted++;
       const r = await fetchMeta(url);
@@ -75,7 +65,13 @@ export async function syncReports(
     }
   }
 
-  for (const [url, it] of open) {
+  // セッションの順に書き込む（同じ PR が複数のセッションに出てくるときは後の状態を残す）
+  const statements: Statement[] = [];
+  for (const { it, url, state } of prs) {
+    if (state !== "open") {
+      if (state) statements.push({ sql: "UPDATE reports SET pr_state = ? WHERE pr_url = ?", args: [state, url] });
+      continue;
+    }
     const sample = mode === "dummy" ? DUMMY_REPORTS[url] : undefined;
     const meta = metas.get(url);
     statements.push({
