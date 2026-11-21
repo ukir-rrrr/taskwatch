@@ -3,6 +3,9 @@ import type { DevinSessionItem } from "./types";
 /** ダミーモード用。design/ のモックと同じタスクを Devin API と同じ形で返す */
 export type DummyItem = DevinSessionItem & { latest_message?: string };
 
+/** ダミーセッションの session_id の接頭辞（reports のダミー行の判別にも使う） */
+export const DUMMY_SESSION_PREFIX = "devin-dummy";
+
 interface Seed {
   title: string;
   status: string;
@@ -54,7 +57,7 @@ export function dummySessions(nowSec = Math.floor(Date.now() / 1000)): DummyItem
     const created = nowSec - s.min * 60;
     const updated = s.took != null ? created + s.took * 60 : nowSec - 60;
     return {
-      session_id: `devin-dummy${String(i + 1).padStart(4, "0")}`,
+      session_id: `${DUMMY_SESSION_PREFIX}${String(i + 1).padStart(4, "0")}`,
       title: s.title,
       status: s.status,
       status_detail: s.status_detail,
@@ -67,3 +70,42 @@ export function dummySessions(nowSec = Math.floor(Date.now() / 1000)): DummyItem
     };
   });
 }
+
+/** ダミーモードで「生成済み」として入れるレポート（それ以外のオープンPRは pending のまま） */
+export const DUMMY_REPORTS: Record<string, { summary: string; code_picks: string }> = {
+  "https://github.com/example/admin-web/pull/412": {
+    summary: `Excel で開くと日本語が化ける原因を、**BOM なしの UTF-8 出力**と特定して修正しました。
+
+- 出力の先頭に BOM を付け、改行を CRLF に統一
+- 1万件を超える注文でもメモリを使い切らないよう、逐次書き出しに変更
+- Excel・Numbers・Google スプレッドシートで開けることをテストで確認
+
+**確認してほしい点:** 備考欄が \`=\` などで始まる場合は先頭に \`'\` を付けて文字列扱いにしています（CSV インジェクション対策）。`,
+    code_picks: `#### \`src/export/orderCsv.ts\`（L12–19）
+
+\`\`\`ts
+// Excel は BOM がないと Shift_JIS として読む
+const BOM = "\\uFEFF";
+
+export function* orderCsvRows(orders) {
+  yield BOM + HEADER.join(",") + "\\r\\n";
+  for (const o of orders) {
+    yield toRow(o).join(",") + "\\r\\n";
+  }
+}
+\`\`\`
+
+文字コードを Shift_JIS に変えると絵文字や旧字の注文者名が欠けるため、UTF-8 のまま BOM で判別させました。
+
+#### \`src/export/escape.ts\`（L3–8）
+
+\`\`\`ts
+export function cell(v: string) {
+  const s = v.replace(/"/g, '""');
+  // 先頭が = + - @ だと数式として実行される
+  return /^[=+\\-@]/.test(s) ? \`"'\${s}"\` : \`"\${s}"\`;
+}
+\`\`\`
+`,
+  },
+};

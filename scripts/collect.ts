@@ -5,12 +5,15 @@
  * DEVIN_API_KEY / DEVIN_ORG_ID はプロセスの環境変数からのみ読む（.env ファイルは読まない）。
  * 未設定ならダミーデータを保存する。
  * TURSO_DATABASE_URL と TURSO_AUTH_TOKEN が両方あれば Turso（libSQL）に書き込む。
+ * オープン状態の PR は reports に status=pending で登録する（pr_url で冪等。既存行は pr_state だけ更新）。
+ * PR のタイトルと作成日時は GitHub API（認証なし）から取り、取れなければセッションのタイトルと検出時刻を使う。
  */
 import { buildCurrentActivity } from "../lib/activity";
 import { openDb, type Db, type Statement } from "../lib/db";
 import { fetchSession, fetchSessions, readCredentials, sessionUrl, type DevinCredentials } from "../lib/devin-api";
 import { needsAttention } from "../lib/devin-status";
-import { dummySessions, type DummyItem } from "../lib/dummy-data";
+import { DUMMY_SESSION_PREFIX, dummySessions, type DummyItem } from "../lib/dummy-data";
+import { syncReports } from "../lib/reports";
 import type { DevinSessionItem } from "../lib/types";
 
 async function collectOnce(): Promise<void> {
@@ -32,6 +35,7 @@ async function collectOnce(): Promise<void> {
     }
   }
   const now = Math.floor(Date.now() / 1000);
+  const reports = await syncReports(db, items, now, mode);
   const UPSERT = `
     INSERT INTO sessions (session_id, title, status, status_detail, acus_consumed, pr_urls, pr_states, url,
       created_at, updated_at, first_seen_at, needs_attention, current_activity, source)
@@ -69,6 +73,9 @@ async function collectOnce(): Promise<void> {
         mode,
       ],
     })),
+    // 実データ収集に切り替えたらダミーのレポートも消す
+    ...(cred ? [{ sql: "DELETE FROM reports WHERE session_id LIKE ?", args: [`${DUMMY_SESSION_PREFIX}%`] }] : []),
+    ...reports.statements,
     { sql: SET_META, args: ["last_collected_at", String(now)] },
     { sql: SET_META, args: ["mode", mode] },
     ...(cred ? [{ sql: SET_META, args: ["org_id", cred.orgId] }] : []),
@@ -77,7 +84,8 @@ async function collectOnce(): Promise<void> {
   db.close();
 
   const label = mode === "dummy" ? "ダミーモード（DEVIN_API_KEY / DEVIN_ORG_ID 未設定）" : "Devin API";
-  console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存 → ${db.label}`);
+  const gh = reports.attempted ? `（GitHub から PR 情報 ${reports.fetched}/${reports.attempted}件）` : "";
+  console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存${gh} → ${db.label}`);
 }
 
 /** 最新50件から外れた「進行中・要確認」のセッションを個別取得し、古い状態のまま残らないようにする */

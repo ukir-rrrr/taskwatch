@@ -24,6 +24,20 @@ const SESSION_COLUMNS = [
   "source",
 ] as const;
 
+const REPORT_COLUMNS = [
+  "pr_url",
+  "session_id",
+  "pr_title",
+  "repo",
+  "pr_state",
+  "created_at",
+  "summary",
+  "code_picks",
+  "status",
+  "generated_at",
+  "github_synced_at",
+] as const;
+
 async function main(): Promise<void> {
   const turso = readTursoConfig();
   if (!turso) throw new Error("TURSO_DATABASE_URL と TURSO_AUTH_TOKEN の両方を環境変数で指定してください");
@@ -32,9 +46,14 @@ async function main(): Promise<void> {
   if (!local) throw new Error(`ローカル DB が見つかりません: ${DB_PATH}`);
   let sessions: Record<string, SqlValue>[];
   let meta: { key: string; value: string }[];
+  let reports: Record<string, SqlValue>[] = [];
   try {
     sessions = await local.all<Record<string, SqlValue>>(`SELECT ${SESSION_COLUMNS.join(", ")} FROM sessions`);
     meta = await local.all<{ key: string; value: string }>("SELECT key, value FROM meta");
+    // reports が無い古いローカル DB でも移行できるようにする
+    if (await local.get("SELECT name FROM sqlite_master WHERE type='table' AND name='reports'")) {
+      reports = await local.all<Record<string, SqlValue>>(`SELECT ${REPORT_COLUMNS.join(", ")} FROM reports`);
+    }
   } finally {
     local.close();
   }
@@ -42,14 +61,18 @@ async function main(): Promise<void> {
   const remote = await openLibsqlDb(turso);
   try {
     const insertSession = `INSERT OR REPLACE INTO sessions (${SESSION_COLUMNS.join(", ")}) VALUES (${SESSION_COLUMNS.map(() => "?").join(", ")})`;
+    const insertReport = `INSERT INTO reports (${REPORT_COLUMNS.join(", ")}) VALUES (${REPORT_COLUMNS.map(() => "?").join(", ")})
+      ON CONFLICT (pr_url) DO UPDATE SET ${REPORT_COLUMNS.filter((c) => c !== "pr_url").map((c) => `${c} = excluded.${c}`).join(", ")}`;
     const stmts: Statement[] = [
       ...sessions.map((row) => ({ sql: insertSession, args: SESSION_COLUMNS.map((c) => row[c] ?? null) })),
       ...meta.map((m) => ({ sql: "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", args: [m.key, m.value] })),
+      // id は Turso 側で振り直し、pr_url（一意）で上書きする
+      ...reports.map((row) => ({ sql: insertReport, args: REPORT_COLUMNS.map((c) => row[c] ?? null) })),
     ];
     await remote.batch(stmts);
     const count = await remote.get<{ n: number }>("SELECT COUNT(*) AS n FROM sessions");
     console.log(
-      `[migrate] ${DB_PATH} → ${remote.label}: sessions ${sessions.length}件 / meta ${meta.length}件をコピー（Turso 側 sessions 合計 ${count?.n ?? "?"}件）`,
+      `[migrate] ${DB_PATH} → ${remote.label}: sessions ${sessions.length}件 / meta ${meta.length}件 / reports ${reports.length}件をコピー（Turso 側 sessions 合計 ${count?.n ?? "?"}件）`,
     );
   } finally {
     remote.close();

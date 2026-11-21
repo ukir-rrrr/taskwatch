@@ -23,11 +23,35 @@ CREATE TABLE IF NOT EXISTS sessions (
   source           TEXT NOT NULL DEFAULT 'devin'
 );
 CREATE INDEX IF NOT EXISTS sessions_updated_at ON sessions (updated_at DESC);
+CREATE TABLE IF NOT EXISTS reports (
+  id           INTEGER PRIMARY KEY,
+  pr_url       TEXT NOT NULL UNIQUE,
+  session_id   TEXT NOT NULL,
+  pr_title     TEXT NOT NULL DEFAULT '',
+  repo         TEXT NOT NULL DEFAULT '',
+  pr_state     TEXT,
+  created_at   INTEGER NOT NULL,
+  summary      TEXT,
+  code_picks   TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'generated')),
+  generated_at INTEGER,
+  github_synced_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS reports_created_at ON reports (created_at DESC);
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 `;
+
+/** 既存のテーブルに後から足した列（CREATE TABLE IF NOT EXISTS では追加されないため ALTER で足す） */
+const ADDED_COLUMNS: [table: string, column: string, type: string][] = [["reports", "github_synced_at", "INTEGER"]];
+
+async function addMissingColumns(columnsOf: (table: string) => Promise<string[]>, exec: (sql: string) => Promise<void>) {
+  for (const [table, column, type] of ADDED_COLUMNS) {
+    if (!(await columnsOf(table)).includes(column)) await exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
 
 export type SqlValue = string | number | bigint | null;
 export interface Statement {
@@ -88,6 +112,11 @@ export async function openLocalDb(opts: { readonly?: boolean; path?: string } = 
     db = new Database(file);
     db.pragma("journal_mode = WAL");
     db.exec(SCHEMA);
+    const local = db;
+    await addMissingColumns(
+      async (t) => (local.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name),
+      async (sql) => void local.exec(sql),
+    );
   }
   return {
     kind: "local",
@@ -111,7 +140,13 @@ export async function openLibsqlDb(config: TursoConfig, opts: { readonly?: boole
   const { createClient } = await import("@libsql/client");
   const client: Client = createClient({ url: config.url, authToken: config.authToken });
   try {
-    if (!opts.readonly) await client.executeMultiple(SCHEMA);
+    if (!opts.readonly) {
+      await client.executeMultiple(SCHEMA);
+      await addMissingColumns(
+        async (t) => (await client.execute(`PRAGMA table_info(${t})`)).rows.map((r) => String(r.name)),
+        async (sql) => void (await client.execute(sql)),
+      );
+    }
   } catch (e) {
     client.close();
     throw e;

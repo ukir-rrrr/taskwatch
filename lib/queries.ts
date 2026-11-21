@@ -1,6 +1,7 @@
 import "server-only";
 import { openDb } from "./db";
-import type { SessionRow } from "./types";
+import { DUMMY_SESSION_PREFIX } from "./dummy-data";
+import type { ReportRow, SessionRow } from "./types";
 
 export interface Snapshot {
   sessions: SessionRow[];
@@ -38,6 +39,27 @@ export async function loadSnapshot(): Promise<Snapshot> {
       lastCollectedAt: meta.last_collected_at ? Number(meta.last_collected_at) : null,
       mode: (meta.mode as Snapshot["mode"]) ?? null,
     };
+  } finally {
+    db.close();
+  }
+}
+
+/** レポートを新しい順に返す。直近の収集モード（ダミー / 実データ）の行だけを出す */
+export async function loadReports(mode: Snapshot["mode"]): Promise<ReportRow[]> {
+  if (!mode) return [];
+  const db = await openDb({ readonly: true });
+  if (!db) return [];
+  try {
+    const hasTable = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='reports'");
+    if (!hasTable) return [];
+    return await db.all<ReportRow>(
+      `SELECT r.id, r.pr_url, r.session_id, r.pr_title, r.repo, r.pr_state, r.created_at, r.summary, r.code_picks,
+              r.status, r.generated_at, s.url AS session_url
+         FROM reports r LEFT JOIN sessions s ON s.session_id = r.session_id
+        WHERE r.session_id ${mode === "dummy" ? "LIKE" : "NOT LIKE"} ?
+        ORDER BY r.created_at DESC, r.id DESC`,
+      [`${DUMMY_SESSION_PREFIX}%`],
+    );
   } finally {
     db.close();
   }
