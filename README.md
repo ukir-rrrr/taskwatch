@@ -6,6 +6,18 @@ Devin のセッションを一覧で監視する個人用 Web アプリです。
 - 画面（Next.js）は SQLite だけを読みます。表示のたびに Devin API を叩くことはありません（30秒ごとに SQLite を読み直します）
 - レポート画面（GitHub PR レポート）と Claude Code 連携は次の段階で対応予定です
 
+## 本番運用
+
+| 項目 | 内容 |
+| --- | --- |
+| 本番URL | https://taskwatch-five.vercel.app （Vercel にデプロイ済み） |
+| データベース | Turso（libSQL、東京リージョン）。接続情報は環境変数 `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` で渡す |
+| デプロイ | GitHub 連携の自動デプロイは未設定。更新時は Vercel CLI で再デプロイする（`vercel --prod`） |
+| 収集ワーカー | VM 上で5分おきに実行され、Turso に書き込む |
+
+- `main` に push・マージしても本番には反映されません。更新を反映するときは、リポジトリのルートで `vercel --prod` を実行してください
+- 設定手順の詳細は [Turso モード（Vercel へのデプロイ）](#turso-モードvercel-へのデプロイ) を参照してください
+
 ## 必要なもの
 
 - Node.js 20 以上
