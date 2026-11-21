@@ -158,8 +158,9 @@ vercel --prod
 
 レポートは PR がマージされた後ではなく、**PR が作成（オープン）された時点**で読めるようにします（マージ判断の材料にするため）。
 
-- `id`, `pr_url`（一意）, `session_id`, `pr_title`, `repo`（`owner/repo`）, `pr_state`, `created_at`（epoch秒）, `summary` / `code_picks`（マークダウン）, `status`（`pending` / `generated`）, `generated_at`
-- `collect` はセッションの `pull_requests` のうちオープンの PR を `status=pending` で登録します（`pr_url` で冪等。既存行は `pr_state` だけ最新に更新）。`pr_title` には当面セッションのタイトルを入れます
+- `id`, `pr_url`（一意）, `session_id`, `pr_title`, `repo`（`owner/repo`）, `pr_state`, `created_at`（epoch秒）, `summary` / `code_picks`（マークダウン）, `status`（`pending` / `generated`）, `generated_at`, `github_synced_at`（GitHub から PR 情報を取れた時刻）
+- `collect` はセッションの `pull_requests` のうちオープンの PR を `status=pending` で登録します（`pr_url` で冪等。既存行は `pr_state` を最新に更新）
+- `pr_title` / `created_at` は GitHub API（`GET /repos/{owner}/{repo}/pulls/{number}`、認証なし）から取った PR のタイトルと作成日時です。プライベートリポジトリやレート制限（未認証は 1 時間 60 回）で取れないときは、セッションのタイトルと検出時刻で登録し、`pending` の間は収集のたびに取り直します（取れた行は以後取り直しません）。ダミーモードでは GitHub API を呼びません
 - `summary` / `code_picks` を書き込んで `status=generated` にする生成処理は別途（未実装）。画面では `pending` の行は「生成中」と表示します
 - ダミーモードでは PR #412 を生成済みのサンプル、#1287 を生成中として登録します。実データを収集するとダミーのレポートは削除されます
 

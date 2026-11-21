@@ -35,6 +35,7 @@ const REPORT_COLUMNS = [
   "code_picks",
   "status",
   "generated_at",
+  "github_synced_at",
 ] as const;
 
 async function main(): Promise<void> {
