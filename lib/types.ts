@@ -27,3 +27,21 @@ export interface SessionRow {
   current_activity: string;
   source: "devin" | "dummy";
 }
+
+export type ReportStatus = "pending" | "generated";
+
+export interface ReportRow {
+  id: number;
+  pr_url: string;
+  session_id: string;
+  pr_title: string;
+  repo: string;
+  pr_state: string | null;
+  created_at: number;
+  summary: string | null;
+  code_picks: string | null;
+  status: ReportStatus;
+  generated_at: number | null;
+  /** sessions テーブルにある Devin のセッション URL（無ければ null） */
+  session_url: string | null;
+}

@@ -23,6 +23,20 @@ CREATE TABLE IF NOT EXISTS sessions (
   source           TEXT NOT NULL DEFAULT 'devin'
 );
 CREATE INDEX IF NOT EXISTS sessions_updated_at ON sessions (updated_at DESC);
+CREATE TABLE IF NOT EXISTS reports (
+  id           INTEGER PRIMARY KEY,
+  pr_url       TEXT NOT NULL UNIQUE,
+  session_id   TEXT NOT NULL,
+  pr_title     TEXT NOT NULL DEFAULT '',
+  repo         TEXT NOT NULL DEFAULT '',
+  pr_state     TEXT,
+  created_at   INTEGER NOT NULL,
+  summary      TEXT,
+  code_picks   TEXT,
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'generated')),
+  generated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS reports_created_at ON reports (created_at DESC);
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL

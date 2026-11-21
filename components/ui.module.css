@@ -143,6 +143,38 @@
 .reportEmpty p { margin: 0; }
 .reportEmpty p:first-child { font-weight: 500; color: var(--ink-2); margin-bottom: 4px; }
 .reportEmpty p + p { font-size: 12.5px; color: var(--ink-3); }
+.reportList { padding: 18px 32px 0; display: flex; flex-direction: column; gap: 14px; }
+.report { border: 1px solid var(--rule); border-radius: 6px; min-width: 0; }
+.report.isPending { border-style: dashed; }
+.reportHead { padding: 14px 18px 12px; }
+.reportTitle { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.55; min-width: 0; overflow-wrap: anywhere; }
+.reportHead .meta { margin-top: 2px; }
+.reportLinks { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 12.5px; }
+.reportLinks a { color: var(--primary); }
+.reportLinks a:hover { text-decoration: underline; }
+.reportPending { margin: 0; padding: 12px 18px 14px; border-top: 1px solid var(--rule-soft); font-size: 12.5px; color: var(--ink-3); }
+.reportSec { padding: 14px 18px 16px; border-top: 1px solid var(--rule-soft); }
+.reportSec h3 { font-size: 12px; font-weight: 500; color: var(--ink-2); margin: 0 0 8px; }
+.reportSec .muted { margin: 0; }
+
+/* マークダウン本文 */
+.md { line-height: 1.8; max-width: 52em; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 10px; }
+.md ul, .md ol { padding-left: 1.4em; }
+.md li + li { margin-top: 2px; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-size: 13px; font-weight: 500; margin: 16px 0 6px; line-height: 1.6; }
+.md a { color: var(--primary); }
+.md a:hover { text-decoration: underline; }
+.md code { font-family: var(--mantine-font-family-monospace), "Noto Sans JP"; font-size: 12px; background: var(--field); padding: 0 4px; border-radius: 3px; }
+.md pre { background: var(--field); border: 1px solid var(--rule-soft); border-radius: 5px; padding: 10px 14px; overflow-x: auto; line-height: 1.7; }
+.md pre code { background: none; padding: 0; white-space: pre; overflow-wrap: normal; }
+.md blockquote { padding-left: 14px; border-left: 1px solid var(--ink); color: var(--ink-2); }
+.md table { border-collapse: collapse; font-size: 12.5px; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--rule); padding: 4px 10px; text-align: left; }
+.md th { font-weight: 500; background: var(--field); }
+.md hr { border: 0; border-top: 1px solid var(--rule); margin: 14px 0; }
 
 /* 中間幅 */
 @media (max-width: 1180px) {
@@ -190,6 +222,8 @@
   .empty { margin: 0 16px; }
   .lede { padding: 0 20px 14px; border-top: 0; }
   .reportEmpty { margin: 0 16px; }
+  .reportList { padding: 0 16px; }
+  .reportHead, .reportSec, .reportPending { padding-left: 14px; padding-right: 14px; }
 
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));

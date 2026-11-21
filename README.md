@@ -147,11 +147,21 @@ vercel --prod
 | `lib/activity.ts` | 「いま何をしているか」の一言（`current_activity`）を作る関数。将来 LLM 要約に差し替える前提で独立 |
 | `lib/db.ts` / `lib/queries.ts` | スキーマと DB 接続（ローカル SQLite / Turso の切り替え）、読み出し |
 | `lib/dummy-data.ts` | ダミーモード用データ（モックと同じタスク） |
+| `app/reports/page.tsx` | レポート画面。`reports` テーブルを新しい順に表示（`summary` / `code_picks` はマークダウン） |
 | `app/` `components/` | 画面（Mantine）。390px のスマホ幅と 1440px の PC 幅に対応 |
 
 ### sessions テーブル
 
 `session_id`, `title`, `status`, `status_detail`, `acus_consumed`, `pr_urls`（JSON）, `created_at`, `updated_at`（epoch秒）, `first_seen_at`, `needs_attention`, `current_activity` に加え、`pr_states`（JSON）, `url`（Devin のセッション URL）, `source`（`devin` / `dummy`）を保存します。
+
+### reports テーブル（PRレポート）
+
+レポートは PR がマージされた後ではなく、**PR が作成（オープン）された時点**で読めるようにします（マージ判断の材料にするため）。
+
+- `id`, `pr_url`（一意）, `session_id`, `pr_title`, `repo`（`owner/repo`）, `pr_state`, `created_at`（epoch秒）, `summary` / `code_picks`（マークダウン）, `status`（`pending` / `generated`）, `generated_at`
+- `collect` はセッションの `pull_requests` のうちオープンの PR を `status=pending` で登録します（`pr_url` で冪等。既存行は `pr_state` だけ最新に更新）。`pr_title` には当面セッションのタイトルを入れます
+- `summary` / `code_picks` を書き込んで `status=generated` にする生成処理は別途（未実装）。画面では `pending` の行は「生成中」と表示します
+- ダミーモードでは PR #412 を生成済みのサンプル、#1287 を生成中として登録します。実データを収集するとダミーのレポートは削除されます
 
 ### 状態の分類
 
