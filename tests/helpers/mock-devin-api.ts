@@ -2,7 +2,7 @@
  * テスト用: globalThis.fetch を差し替え、Devin API の応答を tests/fixtures から返す。実 API には一切つながない。
  * MOCK_DEVIN_LOG にファイルパスを渡すと、受けたリクエストの URL を1行ずつ追記する。
  * MOCK_DEVIN_EXTRA に JSON（messages.json と同じ形）を渡すと、フィクスチャに追加・上書きする。
- * MOCK_DEVIN_SESSIONS に JSON（session_id → セッション）を渡すと、一覧には出ない個別取得用のセッションになる。
+ * MOCK_DEVIN_SESSIONS に JSON（session_id → セッション）を渡すと、一覧には出ない個別取得用のセッションになる（値が 500 なら 500 を返す）。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +30,7 @@ globalThis.fetch = (async (input: string | URL | Request) => {
   }
   const one = url.pathname.match(/^\/v3\/organizations\/[^/]+\/sessions\/([^/]+)$/);
   const extra: Record<string, unknown> = process.env.MOCK_DEVIN_SESSIONS ? JSON.parse(process.env.MOCK_DEVIN_SESSIONS) : {};
+  if (one && extra[decodeURIComponent(one[1])] === 500) return json({ status: 500 }, 500);
   if (one && extra[decodeURIComponent(one[1])]) return json(extra[decodeURIComponent(one[1])]);
   return json({ status: 404, title: "Not Found" }, 404);
 }) as typeof fetch;

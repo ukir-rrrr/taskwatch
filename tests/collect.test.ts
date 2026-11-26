@@ -140,4 +140,22 @@ describe("npm run collect（Devin API をモック）", () => {
     assert.equal((await readRows()).find((r) => r.session_id === id)?.latest_message, "作業中です");
     assert.ok(!collect(real).some((r) => r.includes("old0002")));
   });
+
+  it("個別取得が失敗しても収集全体は止めない", async () => {
+    const db = (await openLocalDb({ path: dbPath }))!;
+    try {
+      await db.batch([
+        {
+          sql: "INSERT INTO sessions (session_id, title, status, created_at, updated_at, first_seen_at, source) VALUES ('devin-err0001', 'エラー', 'running', 1795000000, 1795000900, 1795000000, 'devin')",
+        },
+      ]);
+    } finally {
+      db.close();
+    }
+    const reqs = collect({ ...real, MOCK_DEVIN_SESSIONS: JSON.stringify({ "devin-err0001": 500 }) });
+    assert.ok(reqs.includes("/v3/organizations/org-test/sessions/devin-err0001"));
+    // 一覧のセッションの messages は取りに行き、エラーのセッションは消さずに残る
+    assert.ok(reqs.some((r) => r.includes("devin-run0001/messages")));
+    assert.ok((await readRows()).some((r) => r.session_id === "devin-err0001"));
+  });
 });

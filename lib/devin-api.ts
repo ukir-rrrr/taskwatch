@@ -78,7 +78,7 @@ export async function fetchSession(cred: DevinCredentials, sessionId: string): P
   if (res.status === 404 || res.status === 410) return null;
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Devin API ${res.status} ${res.statusText}: ${body.slice(0, 300)}`);
+    throw new DevinApiError(res.status, `Devin API ${res.status} ${res.statusText}: ${body.slice(0, 300)}`);
   }
   return (await res.json()) as DevinSessionItem;
 }

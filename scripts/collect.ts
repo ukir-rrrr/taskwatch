@@ -11,6 +11,7 @@
 import { buildCurrentActivity } from "../lib/activity";
 import { openDb, type Db, type Statement } from "../lib/db";
 import {
+  DevinApiError,
   fetchMessagesPage,
   fetchSession,
   fetchSessions,
@@ -151,7 +152,15 @@ async function refreshDropped(
   const gone: string[] = [];
   const unreachable: string[] = [];
   for (const { session_id, live } of stale) {
-    const it = await fetchSession(cred, session_id);
+    let it: DevinSessionItem | null;
+    try {
+      it = await fetchSession(cred, session_id);
+    } catch (e) {
+      // 1件の失敗で収集全体を止めない。レート制限ならこの回の個別取得はやめる
+      console.warn(`[collect] セッション個別取得失敗 ${session_id}: ${(e as Error).message}`);
+      if (e instanceof DevinApiError && e.status === 429) break;
+      continue;
+    }
     if (it) items.push(it);
     // 終了済みのセッションは messages の続きを取りに来ただけなので、見つからなくても消さずに取得を諦める
     else (live ? gone : unreachable).push(session_id);
