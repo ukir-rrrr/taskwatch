@@ -118,4 +118,26 @@ describe("npm run collect（Devin API をモック）", () => {
     // 読み切った後は個別取得しない
     assert.ok(!collect({ ...real, MOCK_DEVIN_SESSIONS: JSON.stringify({ [old.session_id]: old }) }).some((r) => r.includes("old0001")));
   });
+
+  it("終了済みのセッションが個別取得で見つからなくても消さず、以後は取りに行かない", async () => {
+    const id = "devin-old0002";
+    const db = (await openLocalDb({ path: dbPath }))!;
+    try {
+      await db.batch([
+        {
+          sql: "INSERT INTO sessions (session_id, title, status, created_at, updated_at, first_seen_at, source) VALUES (?, '別組織', 'exit', 1795000000, 1795000900, 1795000000, 'devin')",
+          args: [id],
+        },
+        {
+          sql: "INSERT INTO session_messages (session_id, latest_message, latest_message_at, cursor, synced_updated_at, checked_at) VALUES (?, '作業中です', 1795000100, 'c', 1795000200, 1795000200)",
+          args: [id],
+        },
+      ]);
+    } finally {
+      db.close();
+    }
+    assert.ok(collect(real).includes(`/v3/organizations/org-test/sessions/${id}`));
+    assert.equal((await readRows()).find((r) => r.session_id === id)?.latest_message, "作業中です");
+    assert.ok(!collect(real).some((r) => r.includes("old0002")));
+  });
 });

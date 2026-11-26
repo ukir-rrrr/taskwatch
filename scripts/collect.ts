@@ -32,6 +32,7 @@ async function collectOnce(): Promise<void> {
 
   const db = (await openDb())!;
   const gone: string[] = [];
+  const unreachable: string[] = [];
   if (cred) {
     const prevOrg = (await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'org_id'"))?.value;
     // 組織を切り替えた直後は、前の組織のセッションを新しい組織で探さない
@@ -39,6 +40,7 @@ async function collectOnce(): Promise<void> {
       const r = await refreshDropped(db, cred, items);
       items.push(...r.items);
       gone.push(...r.gone);
+      unreachable.push(...r.unreachable);
     }
   }
   const now = Math.floor(Date.now() / 1000);
@@ -68,6 +70,10 @@ async function collectOnce(): Promise<void> {
       { sql: "DELETE FROM session_messages WHERE session_id = ?", args: [id] },
       { sql: "DELETE FROM sessions WHERE session_id = ?", args: [id] },
     ]),
+    ...unreachable.map((id) => ({
+      sql: "UPDATE session_messages SET synced_updated_at = (SELECT updated_at FROM sessions WHERE session_id = ?) WHERE session_id = ?",
+      args: [id, id],
+    })),
     ...items.map((it) => ({
       sql: UPSERT,
       args: [
@@ -131,23 +137,26 @@ async function refreshDropped(
   db: Db,
   cred: DevinCredentials,
   fetched: DevinSessionItem[],
-): Promise<{ items: DevinSessionItem[]; gone: string[] }> {
+): Promise<{ items: DevinSessionItem[]; gone: string[]; unreachable: string[] }> {
   const seen = new Set(fetched.map((it) => it.session_id));
   const stale = (
-    await db.all<{ session_id: string }>(
-      `SELECT s.session_id FROM sessions s LEFT JOIN session_messages m ON m.session_id = s.session_id
+    await db.all<{ session_id: string; live: number }>(
+      `SELECT s.session_id, (s.needs_attention = 1 OR s.status IN ('new', 'claimed', 'running', 'resuming')) AS live
+       FROM sessions s LEFT JOIN session_messages m ON m.session_id = s.session_id
        WHERE s.source = 'devin' AND (s.needs_attention = 1 OR s.status IN ('new', 'claimed', 'running', 'resuming')
          OR (m.session_id IS NOT NULL AND (m.synced_updated_at IS NULL OR m.synced_updated_at != s.updated_at)))`,
     )
   ).filter((r) => !seen.has(r.session_id));
   const items: DevinSessionItem[] = [];
   const gone: string[] = [];
-  for (const { session_id } of stale) {
+  const unreachable: string[] = [];
+  for (const { session_id, live } of stale) {
     const it = await fetchSession(cred, session_id);
     if (it) items.push(it);
-    else gone.push(session_id);
+    // 終了済みのセッションは messages の続きを取りに来ただけなので、見つからなくても消さずに取得を諦める
+    else (live ? gone : unreachable).push(session_id);
   }
-  return { items, gone };
+  return { items, gone, unreachable };
 }
 
 async function main(): Promise<void> {
