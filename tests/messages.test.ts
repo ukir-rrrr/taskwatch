@@ -226,8 +226,42 @@ describe("syncLatestMessages（ローカル SQLite）", () => {
     assert.equal((await rows()).length, 0);
   });
 
-  it("セッションが見つからない（404）ときは何も保存しない", async () => {
-    const r = await sync([RUNNING], async () => null);
-    assert.equal(r.statements.length, 0);
+  it("読めなかったセッション（404・エラー）は試行時刻だけ記録し、次回は後ろに回す", async () => {
+    const calls: string[] = [];
+    const fn: FetchPage = async (id) => {
+      calls.push(id);
+      if (id === "devin-bad") throw new DevinApiError(500, "Devin API 500");
+      if (id === "devin-gone") return null;
+      return { items: [], end_cursor: null, has_next_page: false };
+    };
+    const bad = { ...RUNNING, session_id: "devin-bad", updated_at: RUNNING.updated_at + 20 };
+    const gone = { ...RUNNING, session_id: "devin-gone", updated_at: RUNNING.updated_at + 10 };
+    let r = await syncLatestMessages(db, [bad, gone, RUNNING], fn, { now, budget: 2 });
+    await db.batch(r.statements);
+    assert.equal(r.sessions, 0);
+    assert.deepEqual(
+      (await rows()).map((x) => [x.session_id, x.latest_message, x.synced_updated_at]),
+      [["devin-bad", null, null], ["devin-gone", null, null]],
+    );
+    r = await syncLatestMessages(db, [bad, gone, RUNNING], fn, { now: now + 60, budget: 2 });
+    assert.deepEqual(calls.slice(2), ["devin-run0001", "devin-bad"]);
+  });
+
+  it("失敗した呼び出しも予算に数える", async () => {
+    let n = 0;
+    const fn: FetchPage = async () => {
+      n++;
+      throw new DevinApiError(500, "Devin API 500");
+    };
+    const many = Array.from({ length: 5 }, (_, i) => ({ ...RUNNING, session_id: `devin-e${i}` }));
+    const r = await syncLatestMessages(db, many, fn, { now, budget: 3 });
+    assert.equal(n, 3);
+    assert.equal(r.deferred, 2);
+  });
+
+  it("has_next_page なのに end_cursor が無いときは読み途中のままにする", async () => {
+    await sync([EXITED], async () => ({ items: [], end_cursor: null, has_next_page: true }));
+    const [row] = await rows();
+    assert.equal(row.synced_updated_at, null);
   });
 });

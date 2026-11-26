@@ -134,8 +134,9 @@ export async function syncLatestMessages(
     let gone = false;
     try {
       while (pages < maxPages && result.requests < budget) {
-        const page = await fetchPage(s.session_id, cursor);
+        // 失敗した呼び出しも予算に数える
         result.requests++;
+        const page = await fetchPage(s.session_id, cursor);
         if (!page) {
           gone = true;
           break;
@@ -146,16 +147,36 @@ export async function syncLatestMessages(
           cursor = page.end_cursor;
           continue;
         }
-        // 最終ページ。end_cursor が返らない場合は今回の after を残し、次回はこのページから読み直す
+        // 最終ページ。end_cursor が返らない場合は今回の after を残し、次回はこのページから読み直す。
+        // has_next_page なのに end_cursor が無いときは先へ進めないので、読み途中のままにする
         if (page.end_cursor) cursor = page.end_cursor;
-        caughtUp = true;
+        caughtUp = !page.has_next_page;
         break;
       }
     } catch (e) {
       result.errors.push(`${s.session_id}: ${(e as Error).message}`);
       if (e instanceof DevinApiError && e.status === 429) stopped = true;
     }
-    if (gone || pages === 0) continue;
+    if (gone || pages === 0) {
+      // 読めなかったセッション（404 は途中まで読んだ分も捨てる）。前回の状態のまま試行時刻だけ進め、
+      // 失敗し続けるセッションが取得順の先頭に居座らないようにする。429 はセッションのせいではないので記録しない
+      if (!stopped) {
+        result.statements.push(
+          upsertMessageState(
+            before ?? {
+              session_id: s.session_id,
+              latest_message: null,
+              latest_message_at: null,
+              latest_event_id: null,
+              cursor: null,
+              synced_updated_at: null,
+            },
+            opts.now,
+          ),
+        );
+      }
+      continue;
+    }
     result.sessions++;
     result.statements.push(
       upsertMessageState(

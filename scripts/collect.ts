@@ -111,6 +111,7 @@ function dummyMessages(items: (DevinSessionItem & Partial<Pick<DummyItem, "lates
         {
           session_id: it.session_id,
           latest_message: toPreview(it.latest_message!),
+          // ダミーにはメッセージ単位の時刻が無いので、セッションの最終更新時刻を代わりに使う
           latest_message_at: it.updated_at,
           latest_event_id: null,
           cursor: null,
