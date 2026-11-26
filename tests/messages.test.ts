@@ -192,9 +192,25 @@ describe("syncLatestMessages（ローカル SQLite）", () => {
 
     const second = fixtureFetch();
     await sync([RUNNING, EXITED], second.fn);
-    assert.deepEqual(second.calls, ["devin-run0001|cursor-run-1", "devin-exit0001|"]);
+    // 一度も取っていない終了済みセッションが先
+    assert.deepEqual(second.calls, ["devin-exit0001|", "devin-run0001|cursor-run-1"]);
     [, run] = await rows();
     assert.equal(run.latest_event_id, "event-r3");
+  });
+
+  it("予算が足りなくても、最後に取ってから長いセッションを先に取るので取り残しが出ない", async () => {
+    const calls: string[] = [];
+    const fn: FetchPage = async (id) => {
+      calls.push(id);
+      return { items: [], end_cursor: null, has_next_page: false };
+    };
+    const a = { ...RUNNING, session_id: "devin-a", updated_at: RUNNING.updated_at + 10 };
+    const b = { ...RUNNING, session_id: "devin-b" };
+    for (let i = 0; i < 4; i++) {
+      const r = await syncLatestMessages(db, [a, b], fn, { now: now + i * 60, budget: 1 });
+      await db.batch(r.statements);
+    }
+    assert.deepEqual(calls, ["devin-a", "devin-b", "devin-a", "devin-b"]);
   });
 
   it("429 を受けたらその回の取得をやめ、ほかのセッションは次回に回す", async () => {

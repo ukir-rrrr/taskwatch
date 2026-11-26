@@ -102,16 +102,19 @@ export async function syncLatestMessages(
 ): Promise<SyncResult> {
   const budget = opts.budget ?? DEFAULT_REQUEST_BUDGET;
   const maxPages = opts.maxPagesPerSession ?? MAX_PAGES_PER_SESSION;
-  const prevRows = await db.all<MessageState>(
-    "SELECT session_id, latest_message, latest_message_at, latest_event_id, cursor, synced_updated_at FROM session_messages",
+  const prevRows = await db.all<MessageState & { checked_at: number }>(
+    "SELECT session_id, latest_message, latest_message_at, latest_event_id, cursor, synced_updated_at, checked_at FROM session_messages",
   );
   const prev = new Map(prevRows.map((r) => [r.session_id, r]));
+  const checkedAt = (s: SessionLike) => prev.get(s.session_id)?.checked_at ?? 0;
 
-  // 動いているセッションを先に、その中では新しい順
+  // 予算が足りないときに同じセッションばかり取らないよう、最後に取ってから長いもの（未取得を含む）を先に。
+  // 同順位なら動いているセッションを先に、その中では新しい順
   const targets = sessions
     .filter((s) => needsFetch(s, prev.get(s.session_id)))
     .sort(
       (a, b) =>
+        checkedAt(a) - checkedAt(b) ||
         Number(isActive(b.status, b.status_detail)) - Number(isActive(a.status, a.status_detail)) ||
         b.updated_at - a.updated_at,
     );
