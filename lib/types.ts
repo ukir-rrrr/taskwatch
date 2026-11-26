@@ -26,4 +26,26 @@ export interface SessionRow {
   needs_attention: boolean;
   current_activity: string;
   source: "devin" | "dummy";
+  /** Devin 本人発の最新メッセージ（先頭300字程度のプレビュー）。未取得なら null */
+  latest_message: string | null;
+  latest_message_at: number | null;
+}
+
+/** Devin API v3 `GET /organizations/{org_id}/sessions/{devin_id}/messages` の items[] */
+export interface DevinMessageItem {
+  event_id: string;
+  created_at: number;
+  message: string;
+  /** "devin" = Devin 本人発、"user" = ユーザー発 */
+  source: "devin" | "user" | string;
+  origin?: string | null;
+  user_id?: string | null;
+  username?: string | null;
+}
+
+export interface DevinMessagesPage {
+  items: DevinMessageItem[];
+  end_cursor: string | null;
+  has_next_page: boolean;
+  total?: number | null;
 }

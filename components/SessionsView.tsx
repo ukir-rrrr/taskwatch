@@ -86,7 +86,7 @@ export function SessionsView({ sessions, now, header }: Props) {
       </div>
 
       <aside className={s.panel} aria-label="選択中のセッション">
-        {selected ? <Detail item={selected} /> : <p className={s.pSec + " " + s.muted}>セッションを選ぶと詳細が表示されます。</p>}
+        {selected ? <Detail item={selected} now={now} /> : <p className={s.pSec + " " + s.muted}>セッションを選ぶと詳細が表示されます。</p>}
       </aside>
 
       <Drawer
@@ -99,7 +99,7 @@ export function SessionsView({ sessions, now, header }: Props) {
         title={<span className={s.muted}>セッションの詳細</span>}
         styles={{ header: { borderBottom: "1px solid var(--rule)", minHeight: 0, padding: "10px 16px" } }}
       >
-        {selected && <Detail item={selected} />}
+        {selected && <Detail item={selected} now={now} />}
       </Drawer>
     </div>
   );
@@ -249,7 +249,11 @@ function Rows({ items, selectedId, onSelect, empty }: { items: Item[]; selectedI
   );
 }
 
-function Detail({ item }: { item: Item }) {
+function Detail({ item, now }: { item: Item; now: number }) {
+  const final = item.group === "done" || item.group === "failed";
+  const msg = item.latest_message;
+  // ダミーモードなど current_activity が最新メッセージの抜粋のときは重ねて出さない
+  const showActivity = !msg || !msg.startsWith(item.current_activity.replace(/…$/, ""));
   return (
     <>
       <div className={s.pHead}>
@@ -265,8 +269,24 @@ function Detail({ item }: { item: Item }) {
       </div>
       <div className={s.pBody}>
         <section className={s.pSec}>
-          <h3>いまの作業</h3>
-          <p>{item.current_activity}</p>
+          <h3>
+            いまの状況
+            {final && msg && <span className={s.qTag} style={{ marginLeft: 8, marginRight: 0 }}>最終報告</span>}
+          </h3>
+          {showActivity && <p>{item.current_activity}</p>}
+          {msg ? (
+            <figure className={s.latestMsg}>
+              <blockquote>{msg}</blockquote>
+              {item.latest_message_at != null && (
+                <figcaption className={`${s.muted} ${s.num}`}>
+                  Devin の{final ? "最終" : "最新"}メッセージ・{fmtDateTime(item.latest_message_at)}（
+                  {fmtDuration(now - item.latest_message_at)}前）
+                </figcaption>
+              )}
+            </figure>
+          ) : (
+            <p className={s.muted}>Devin のメッセージはまだ取得していません</p>
+          )}
           <Button component="a" href={item.url} target="_blank" rel="noopener noreferrer" fullWidth>
             Devinで開く
           </Button>

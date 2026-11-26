@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS sessions (
   source           TEXT NOT NULL DEFAULT 'devin'
 );
 CREATE INDEX IF NOT EXISTS sessions_updated_at ON sessions (updated_at DESC);
+CREATE TABLE IF NOT EXISTS session_messages (
+  session_id        TEXT PRIMARY KEY,
+  latest_message    TEXT,
+  latest_message_at INTEGER,
+  latest_event_id   TEXT,
+  cursor            TEXT,
+  synced_updated_at INTEGER,
+  checked_at        INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL

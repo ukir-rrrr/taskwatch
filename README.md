@@ -34,6 +34,8 @@ npm run dev       # → http://localhost:3000
 
 本番ビルドは `npm run build && npm start` です。
 
+テストは `npm test` です（Node の test runner。Devin API は `tests/fixtures` のフィクスチャを返すモックに差し替えるので、キーは不要で実 API にも接続しません）。
+
 ## 実データの収集（運用）
 
 収集ワーカーは `DEVIN_API_KEY` / `DEVIN_ORG_ID` を**プロセスの環境変数からのみ**読みます。`.env` / `.env.local` は読み込みません。
@@ -144,6 +146,7 @@ vercel --prod
 | `scripts/migrate-to-turso.ts` | ローカル SQLite → Turso のワンオフコピー（`npm run migrate:turso`） |
 | `lib/devin-api.ts` | `GET /v3/organizations/{org_id}/sessions?limit=50` の呼び出し |
 | `lib/devin-status.ts` | `status` / `status_detail` から「要確認／実行中／失敗・異常終了／完了・停止」への分類（分類ロジックはこのファイルに集約） |
+| `lib/messages.ts` | 各セッションの「Devin 本人発の最新メッセージ」の取得（`GET .../sessions/{devin_id}/messages`）と保存 |
 | `lib/activity.ts` | 「いま何をしているか」の一言（`current_activity`）を作る関数。将来 LLM 要約に差し替える前提で独立 |
 | `lib/db.ts` / `lib/queries.ts` | スキーマと DB 接続（ローカル SQLite / Turso の切り替え）、読み出し |
 | `lib/dummy-data.ts` | ダミーモード用データ（モックと同じタスク） |
@@ -152,6 +155,26 @@ vercel --prod
 ### sessions テーブル
 
 `session_id`, `title`, `status`, `status_detail`, `acus_consumed`, `pr_urls`（JSON）, `created_at`, `updated_at`（epoch秒）, `first_seen_at`, `needs_attention`, `current_activity` に加え、`pr_states`（JSON）, `url`（Devin のセッション URL）, `source`（`devin` / `dummy`）を保存します。
+
+### session_messages テーブル（いまの状況）
+
+セッション詳細の「いまの状況」欄に出す、Devin 本人発（`source = "devin"`）の最新メッセージを保存します。ユーザー発（`source = "user"`）は使いません。
+
+| 列 | 内容 |
+| --- | --- |
+| `latest_message` / `latest_message_at` | 本文のプレビュー（先頭300字。添付などの UI 用の印は除く）とその時刻（epoch秒） |
+| `latest_event_id` | そのメッセージの `event_id` |
+| `cursor` | 次回の取得で `after` に渡すカーソル |
+| `synced_updated_at` | 最後のページまで読んだ時点のセッションの `updated_at`（読み途中なら NULL） |
+
+messages API は古い順のカーソル式（`first` / `after`）なので、API 呼び出しを次のように抑えています。
+
+- 初回だけ先頭から最後のページまで読み、以後は保存したカーソルの続き（新しい分）だけを取得する（通常1セッション1回）
+- 実行中・返信待ちのセッションは毎回、終了・停止したセッションは最後まで読んだ後は `updated_at` が変わらない限り取得しない（最終メッセージは確定済みとして扱う）
+- 1回の収集で messages API を呼ぶのは合計30回まで、1セッション5ページまで。残りは次回の収集で続きから取得する。429 を受けたらその回の取得をやめる
+- ダミーモードでは API を呼ばず、モックの文言を最新メッセージとして保存する
+
+テーブルは `CREATE TABLE IF NOT EXISTS` で追加しているので、新しい収集ワーカーの初回実行時に Turso 側にも作成されます（画面はテーブルが無い間は「まだ取得していません」と表示）。
 
 ### 状態の分類
 

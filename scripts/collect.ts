@@ -5,12 +5,22 @@
  * DEVIN_API_KEY / DEVIN_ORG_ID はプロセスの環境変数からのみ読む（.env ファイルは読まない）。
  * 未設定ならダミーデータを保存する。
  * TURSO_DATABASE_URL と TURSO_AUTH_TOKEN が両方あれば Turso（libSQL）に書き込む。
+ * 各セッションの messages は前回の続き（新しい分）だけを取得し、Devin 本人発の最新メッセージを保存する。
+ * 終了・停止したセッションは最後まで読んだ後は取り直さない（lib/messages.ts）。
  */
 import { buildCurrentActivity } from "../lib/activity";
 import { openDb, type Db, type Statement } from "../lib/db";
-import { fetchSession, fetchSessions, readCredentials, sessionUrl, type DevinCredentials } from "../lib/devin-api";
+import {
+  fetchMessagesPage,
+  fetchSession,
+  fetchSessions,
+  readCredentials,
+  sessionUrl,
+  type DevinCredentials,
+} from "../lib/devin-api";
 import { needsAttention } from "../lib/devin-status";
 import { dummySessions, type DummyItem } from "../lib/dummy-data";
+import { syncLatestMessages, toPreview, upsertMessageState, type SyncResult } from "../lib/messages";
 import type { DevinSessionItem } from "../lib/types";
 
 async function collectOnce(): Promise<void> {
@@ -32,6 +42,10 @@ async function collectOnce(): Promise<void> {
     }
   }
   const now = Math.floor(Date.now() / 1000);
+  const messages: SyncResult = cred
+    ? await syncLatestMessages(db, items, (id, after) => fetchMessagesPage(cred, id, after), { now })
+    : dummyMessages(items, now);
+  for (const e of messages.errors) console.warn(`[collect] messages 取得失敗 ${e}`);
   const UPSERT = `
     INSERT INTO sessions (session_id, title, status, status_detail, acus_consumed, pr_urls, pr_states, url,
       created_at, updated_at, first_seen_at, needs_attention, current_activity, source)
@@ -48,8 +62,12 @@ async function collectOnce(): Promise<void> {
   // 1つの書き込みトランザクションで反映する
   const stmts: Statement[] = [
     // ダミーは毎回作り直す。実データ収集に切り替えたらダミーは消す
+    { sql: "DELETE FROM session_messages WHERE session_id IN (SELECT session_id FROM sessions WHERE source = 'dummy')" },
     { sql: "DELETE FROM sessions WHERE source = 'dummy'" },
-    ...gone.map((id) => ({ sql: "DELETE FROM sessions WHERE session_id = ?", args: [id] })),
+    ...gone.flatMap((id) => [
+      { sql: "DELETE FROM session_messages WHERE session_id = ?", args: [id] },
+      { sql: "DELETE FROM sessions WHERE session_id = ?", args: [id] },
+    ]),
     ...items.map((it) => ({
       sql: UPSERT,
       args: [
@@ -69,6 +87,7 @@ async function collectOnce(): Promise<void> {
         mode,
       ],
     })),
+    ...messages.statements,
     { sql: SET_META, args: ["last_collected_at", String(now)] },
     { sql: SET_META, args: ["mode", mode] },
     ...(cred ? [{ sql: SET_META, args: ["org_id", cred.orgId] }] : []),
@@ -77,7 +96,30 @@ async function collectOnce(): Promise<void> {
   db.close();
 
   const label = mode === "dummy" ? "ダミーモード（DEVIN_API_KEY / DEVIN_ORG_ID 未設定）" : "Devin API";
-  console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存 → ${db.label}`);
+  const msg = cred
+    ? `（messages ${messages.sessions}件を更新・API ${messages.requests}回${messages.deferred ? `・${messages.deferred}件は次回` : ""}）`
+    : "";
+  console.log(`[collect] ${new Date().toLocaleString("ja-JP")} ${label}: ${items.length}件を保存${msg} → ${db.label}`);
+}
+
+/** ダミーモード: モックの文言を Devin の最新メッセージとして保存する */
+function dummyMessages(items: (DevinSessionItem & Partial<Pick<DummyItem, "latest_message">>)[], now: number): SyncResult {
+  const statements = items
+    .filter((it) => it.latest_message)
+    .map((it) =>
+      upsertMessageState(
+        {
+          session_id: it.session_id,
+          latest_message: toPreview(it.latest_message!),
+          latest_message_at: it.updated_at,
+          latest_event_id: null,
+          cursor: null,
+          synced_updated_at: it.updated_at,
+        },
+        now,
+      ),
+    );
+  return { statements, requests: 0, sessions: statements.length, deferred: 0, errors: [] };
 }
 
 /** 最新50件から外れた「進行中・要確認」のセッションを個別取得し、古い状態のまま残らないようにする */
