@@ -24,10 +24,14 @@ export async function loadSnapshot(): Promise<Snapshot> {
     const meta = Object.fromEntries(
       (await db.all<{ key: string; value: string }>("SELECT key, value FROM meta")).map((m) => [m.key, m.value]),
     );
+    // session_messages は後から足したテーブルなので、収集ワーカーが新しい版で動くまでは無い場合がある
+    const hasMessages = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='session_messages'");
+    const select = hasMessages
+      ? `SELECT s.*, m.latest_message, m.latest_message_at FROM sessions s
+         LEFT JOIN session_messages m ON m.session_id = s.session_id`
+      : "SELECT s.*, NULL AS latest_message, NULL AS latest_message_at FROM sessions s";
     // 直近の収集モードの行だけを出す（ダミーに戻しても実データと混ざらない）
-    const rows = await db.all<RawRow>("SELECT * FROM sessions WHERE source = ? ORDER BY updated_at DESC", [
-      meta.mode ?? "devin",
-    ]);
+    const rows = await db.all<RawRow>(`${select} WHERE s.source = ? ORDER BY s.updated_at DESC`, [meta.mode ?? "devin"]);
     return {
       sessions: rows.map((r) => ({
         ...r,

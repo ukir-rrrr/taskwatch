@@ -1,0 +1,29 @@
+{
+  "devin-run0001|": {
+    "items": [
+      { "event_id": "event-r1", "created_at": 1795230010, "message": "在庫同期バッチがタイムアウトする件を調べてください。", "source": "user", "origin": "api", "user_id": "user-1", "username": "tester" },
+      { "event_id": "event-r2", "created_at": 1795230020, "message": "了解しました。バッチの処理時間を計測します。", "source": "devin", "origin": null, "user_id": null, "username": null }
+    ],
+    "end_cursor": "cursor-run-1",
+    "has_next_page": true,
+    "total": null
+  },
+  "devin-run0001|cursor-run-1": {
+    "items": [
+      { "event_id": "event-r3", "created_at": 1795231000, "message": "500件ずつ分けて同期する処理を実装中です。\n\nATTACHMENT:{\"url\":\"https://app.devin.ai/attachments/x/plan.png\"}", "source": "devin", "origin": null, "user_id": null, "username": null },
+      { "event_id": "event-r4", "created_at": 1795231400, "message": "ついでにログも出してください", "source": "user", "origin": "webapp", "user_id": "user-1", "username": "tester" }
+    ],
+    "end_cursor": null,
+    "has_next_page": false,
+    "total": null
+  },
+  "devin-exit0001|": {
+    "items": [
+      { "event_id": "event-e1", "created_at": 1795220010, "message": "CSVの文字化けを直してください", "source": "user", "origin": "api", "user_id": "user-1", "username": "tester" },
+      { "event_id": "event-e2", "created_at": 1795224900, "message": "PRを作成しました: https://github.com/example/admin-web/pull/412\n\nBOM 付き UTF-8 で出力するよう修正しました。[OFFER_TEST_APP]CSVを確認[/OFFER_TEST_APP]", "source": "devin", "origin": null, "user_id": null, "username": null }
+    ],
+    "end_cursor": "cursor-exit-1",
+    "has_next_page": false,
+    "total": 2
+  }
+}
