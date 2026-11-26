@@ -122,7 +122,10 @@ function dummyMessages(items: (DevinSessionItem & Partial<Pick<DummyItem, "lates
   return { statements, requests: 0, sessions: statements.length, deferred: 0, errors: [] };
 }
 
-/** 最新50件から外れた「進行中・要確認」のセッションを個別取得し、古い状態のまま残らないようにする */
+/**
+ * 最新50件から外れた「進行中・要確認」のセッションと、messages を今の updated_at まで読み切れていないセッションを
+ * 個別取得し、古い状態（途中経過のメッセージを含む）のまま残らないようにする
+ */
 async function refreshDropped(
   db: Db,
   cred: DevinCredentials,
@@ -131,7 +134,9 @@ async function refreshDropped(
   const seen = new Set(fetched.map((it) => it.session_id));
   const stale = (
     await db.all<{ session_id: string }>(
-      "SELECT session_id FROM sessions WHERE source = 'devin' AND (needs_attention = 1 OR status IN ('new', 'claimed', 'running', 'resuming'))",
+      `SELECT s.session_id FROM sessions s LEFT JOIN session_messages m ON m.session_id = s.session_id
+       WHERE s.source = 'devin' AND (s.needs_attention = 1 OR s.status IN ('new', 'claimed', 'running', 'resuming')
+         OR (m.session_id IS NOT NULL AND (m.synced_updated_at IS NULL OR m.synced_updated_at != s.updated_at)))`,
     )
   ).filter((r) => !seen.has(r.session_id));
   const items: DevinSessionItem[] = [];

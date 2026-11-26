@@ -84,4 +84,38 @@ describe("npm run collect（Devin API をモック）", () => {
       "/v3/organizations/org-test/sessions/devin-run0001/messages?first=100&after=cursor-run-1",
     ]);
   });
+
+  it("一覧から外れたセッションも、messages を読み切れていなければ個別取得して最終メッセージを取る", async () => {
+    // 実行中に途中経過だけ保存され、その後終了して一覧（最新50件）から外れた状態
+    const old = { session_id: "devin-old0001", title: "古いセッション", status: "exit", status_detail: null, acus_consumed: 1,
+      pull_requests: [], created_at: 1795100000, updated_at: 1795100900, url: "https://app.devin.ai/sessions/old0001" };
+    const db = (await openLocalDb({ path: dbPath }))!;
+    try {
+      await db.batch([
+        {
+          sql: "INSERT INTO sessions (session_id, title, status, created_at, updated_at, first_seen_at, source) VALUES (?, ?, 'exit', ?, ?, ?, 'devin')",
+          args: [old.session_id, old.title, old.created_at, old.updated_at, old.created_at],
+        },
+        {
+          sql: "INSERT INTO session_messages (session_id, latest_message, latest_message_at, latest_event_id, cursor, synced_updated_at, checked_at) VALUES (?, '作業中です', ?, 'e-old-1', 'cursor-old-1', ?, ?)",
+          args: [old.session_id, 1795100100, 1795100200, 1795100200],
+        },
+      ]);
+    } finally {
+      db.close();
+    }
+    const done = { items: [{ event_id: "e-old-2", created_at: 1795100800, message: "完了しました", source: "devin" }], end_cursor: null, has_next_page: false };
+    const reqs = collect({
+      ...real,
+      MOCK_DEVIN_SESSIONS: JSON.stringify({ [old.session_id]: old }),
+      MOCK_DEVIN_EXTRA: JSON.stringify({ "devin-old0001|cursor-old-1": done }),
+    });
+    assert.ok(reqs.includes("/v3/organizations/org-test/sessions/devin-old0001"));
+    assert.ok(reqs.includes("/v3/organizations/org-test/sessions/devin-old0001/messages?first=100&after=cursor-old-1"));
+    const row = (await readRows()).find((r) => r.session_id === old.session_id);
+    assert.equal(row?.latest_message, "完了しました");
+
+    // 読み切った後は個別取得しない
+    assert.ok(!collect({ ...real, MOCK_DEVIN_SESSIONS: JSON.stringify({ [old.session_id]: old }) }).some((r) => r.includes("old0001")));
+  });
 });
